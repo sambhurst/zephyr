@@ -271,9 +271,6 @@ void transmit_message(struct k_work *tx_job)
 	radio_api->set_channel(radio_dev, sTransmitFrame.mChannel);
 	radio_api->set_txpower(radio_dev, tx_power);
 
-	net_pkt_set_ieee802154_frame_retry(tx_pkt,
-					   sTransmitFrame.mInfo.mTxInfo.mIsARetx);
-
 	if ((radio_api->get_capabilities(radio_dev) & IEEE802154_HW_TXTIME) &&
 	    (sTransmitFrame.mInfo.mTxInfo.mTxDelay != 0)) {
 		uint64_t tx_at = sTransmitFrame.mInfo.mTxInfo.mTxDelayBaseTime +
@@ -1066,7 +1063,7 @@ uint8_t otPlatRadioGetCslAccuracy(otInstance *aInstance)
 	return radio_api->get_sch_acc(radio_dev);
 }
 
-#if defined(CONFIG_OPENTHREAD_LINK_METRICS)
+#if defined(CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT)
 /**
  * Header IE format - IEEE Std. 802.15.4-2015, 7.4.2.1 && 7.4.2.2
  *
@@ -1180,4 +1177,5 @@ otError otPlatRadioConfigureEnhAckProbing(otInstance *aInstance, otLinkMetrics a
 
 	return result ? OT_ERROR_FAILED : OT_ERROR_NONE;
 }
-#endif /* OPENTHREAD_CONFIG_MLE_LINK_METRICS_ENABLE */
+
+#endif /* CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT */

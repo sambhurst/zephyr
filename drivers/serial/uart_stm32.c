@@ -25,7 +25,7 @@
 #include <drivers/clock_control.h>
 
 #ifdef CONFIG_UART_ASYNC_API
-#include <dt-bindings/dma/stm32_dma.h>
+#include <drivers/dma/dma_stm32.h>
 #include <drivers/dma.h>
 #endif
 
@@ -1426,7 +1426,7 @@ static int uart_stm32_init(const struct device *dev)
 
 #ifdef CONFIG_PM_DEVICE
 static int uart_stm32_set_power_state(const struct device *dev,
-					      uint32_t new_state)
+					      enum pm_device_state new_state)
 {
 	USART_TypeDef *UartInstance = UART_STRUCT(dev);
 	struct uart_stm32_data *data = DEV_DATA(dev);
@@ -1465,13 +1465,12 @@ static int uart_stm32_set_power_state(const struct device *dev,
  */
 static int uart_stm32_pm_control(const struct device *dev,
 					 uint32_t ctrl_command,
-					 uint32_t *state, pm_device_cb cb,
-					 void *arg)
+					 enum pm_device_state *state)
 {
 	struct uart_stm32_data *data = DEV_DATA(dev);
 
 	if (ctrl_command == PM_DEVICE_STATE_SET) {
-		uint32_t new_state = *state;
+		enum pm_device_state new_state = *state;
 
 		if (new_state != data->pm_state) {
 			uart_stm32_set_power_state(dev, new_state);
@@ -1481,47 +1480,37 @@ static int uart_stm32_pm_control(const struct device *dev,
 		*state = data->pm_state;
 	}
 
-	if (cb) {
-		cb(dev, 0, state, arg);
-	}
-
 	return 0;
 }
 #endif /* CONFIG_PM_DEVICE */
 
 #ifdef CONFIG_UART_ASYNC_API
-#define DMA_CHANNEL_CONFIG(id, dir)					\
-	DT_INST_DMAS_CELL_BY_NAME(id, dir, channel_config)
-#define DMA_FEATURES(id, dir)						\
-	DT_INST_DMAS_CELL_BY_NAME(id, dir, features)
-#define DMA_CTLR(id, dir)						\
-	DT_INST_DMAS_CTLR_BY_NAME(id, dir)
 
 /* src_dev and dest_dev should be 'MEMORY' or 'PERIPHERAL'. */
 #define UART_DMA_CHANNEL_INIT(index, dir, dir_cap, src_dev, dest_dev)	\
-	.dma_dev = DEVICE_DT_GET(DMA_CTLR(index, dir)),			\
+	.dma_dev = DEVICE_DT_GET(STM32_DMA_CTLR(index, dir)),			\
 	.dma_channel = DT_INST_DMAS_CELL_BY_NAME(index, dir, channel),	\
 	.dma_cfg = {							\
 		.dma_slot = DT_INST_DMAS_CELL_BY_NAME(index, dir, slot),\
 		.channel_direction = STM32_DMA_CONFIG_DIRECTION(	\
-					DMA_CHANNEL_CONFIG(index, dir)),\
+					STM32_DMA_CHANNEL_CONFIG(index, dir)),\
 		.channel_priority = STM32_DMA_CONFIG_PRIORITY(		\
-				DMA_CHANNEL_CONFIG(index, dir)),	\
+				STM32_DMA_CHANNEL_CONFIG(index, dir)),	\
 		.source_data_size = STM32_DMA_CONFIG_##src_dev##_DATA_SIZE(\
-					DMA_CHANNEL_CONFIG(index, dir)),\
+					STM32_DMA_CHANNEL_CONFIG(index, dir)),\
 		.dest_data_size = STM32_DMA_CONFIG_##dest_dev##_DATA_SIZE(\
-				DMA_CHANNEL_CONFIG(index, dir)),\
+				STM32_DMA_CHANNEL_CONFIG(index, dir)),\
 		.source_burst_length = 1, /* SINGLE transfer */		\
 		.dest_burst_length = 1,					\
 		.block_count = 1,					\
 		.dma_callback = uart_stm32_dma_##dir##_cb,		\
 	},								\
 	.src_addr_increment = STM32_DMA_CONFIG_##src_dev##_ADDR_INC(	\
-				DMA_CHANNEL_CONFIG(index, dir)),	\
+				STM32_DMA_CHANNEL_CONFIG(index, dir)),	\
 	.dst_addr_increment = STM32_DMA_CONFIG_##dest_dev##_ADDR_INC(	\
-				DMA_CHANNEL_CONFIG(index, dir)),	\
+				STM32_DMA_CHANNEL_CONFIG(index, dir)),	\
 	.fifo_threshold = STM32_DMA_FEATURES_FIFO_THRESHOLD(		\
-				DMA_FEATURES(index, dir)),		\
+				STM32_DMA_FEATURES(index, dir)),		\
 
 #endif
 

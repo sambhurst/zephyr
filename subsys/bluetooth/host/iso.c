@@ -332,7 +332,7 @@ void bt_iso_connected(struct bt_conn *conn)
 	}
 }
 
-static void bt_iso_remove_data_path(struct bt_conn *conn)
+void bt_iso_remove_data_path(struct bt_conn *conn)
 {
 	BT_DBG("%p", conn);
 
@@ -413,8 +413,6 @@ void bt_iso_disconnected(struct bt_conn *conn)
 	if (sys_slist_is_empty(&conn->channels)) {
 		return;
 	}
-
-	bt_iso_remove_data_path(conn);
 
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&conn->channels, chan, next, node) {
 		bt_iso_chan_disconnected(chan, conn->err);
@@ -677,6 +675,10 @@ void bt_iso_cleanup(struct bt_conn *conn)
 	if (iso->acl) {
 		bt_conn_unref(iso->acl);
 		iso->acl = NULL;
+
+		if (conn->role == BT_CONN_ROLE_SLAVE) {
+			return;
+		}
 
 		/* Check if conn is last of CIG */
 		for (i = 0; i < CONFIG_BT_ISO_MAX_CHAN; i++) {

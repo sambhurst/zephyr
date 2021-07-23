@@ -186,6 +186,7 @@
 /drivers/adc/adc_stm32.c                  @cybertale
 /drivers/bluetooth/                       @joerchan @jhedberg @Vudentz
 /drivers/cache/                           @carlocaione
+/drivers/syscon/                          @carlocaione
 /drivers/can/                             @alexanderwachter
 /drivers/can/*mcp2515*                    @karstenkoenig
 /drivers/can/*rcar*                       @julien-massot
@@ -220,6 +221,7 @@
 /drivers/flash/                           @nashif @nvlsianpu
 /drivers/flash/*nrf*                      @nvlsianpu
 /drivers/gpio/                            @mnkp
+/drivers/gpio/*b91*                       @yurvyn
 /drivers/gpio/*lmp90xxx*                  @henrikbrixandersen
 /drivers/gpio/*stm32*                     @erwango
 /drivers/gpio/*eos_s3*                    @wtatarski @kowalewskijan @kgugala
@@ -235,12 +237,14 @@
 /drivers/i2c/slave/*eeprom*               @henrikbrixandersen
 /drivers/i2c/Kconfig.test                 @mbolivar-nordic
 /drivers/i2c/i2c_test.c                   @mbolivar-nordic
+/drivers/i2c/*rcar*                       @aaillet
 /drivers/i2s/*litex*                      @mateusz-holenko @kgugala @pgielda
 /drivers/ieee802154/                      @rlubos @tbursztyka
 /drivers/ieee802154/ieee802154_rf2xx*     @tbursztyka @nandojve
 /drivers/ieee802154/ieee802154_cc13xx*    @bwitherspoon @cfriedt
 /drivers/interrupt_controller/            @dcpleung @nashif
 /drivers/interrupt_controller/intc_gic.c  @stephanosio
+/drivers/interrupt_controller/*esp32*     @glaubermaroto
 /drivers/ipm/ipm_mhu*                     @karl-zh
 /drivers/ipm/Kconfig.nrfx                 @masz-nordic @ioannisg
 /drivers/ipm/Kconfig.nrfx_ipc_channel     @masz-nordic @ioannisg
@@ -249,7 +253,9 @@
 /drivers/ipm/ipm_nrfx_ipc.c               @masz-nordic @ioannisg
 /drivers/ipm/ipm_nrfx_ipc.h               @masz-nordic @ioannisg
 /drivers/ipm/ipm_stm32_ipcc.c             @arnopo
-/drivers/kscan/                           @albertofloyd @franciscomunoz @scottwcpg
+/drivers/kscan/                           @VenkatKotakonda @franciscomunoz @scottwcpg
+/drivers/kscan/*xec*                      @franciscomunoz @scottwcpg
+/drivers/kscan/*ft5336*                   @MaureenHelm
 /drivers/kscan/*ht16k33*                  @henrikbrixandersen
 /drivers/led/                             @Mani-Sadhasivam
 /drivers/led_strip/                       @mbolivar-nordic
@@ -261,10 +267,13 @@
 /drivers/modem/Kconfig.hl7800             @rerickson1
 /drivers/pcie/                            @dcpleung @nashif @jhedberg
 /drivers/peci/                            @albertofloyd @franciscomunoz @scottwcpg
+/drivers/pinmux/*b91*                     @yurvyn
 /drivers/pinmux/*hsdk*                    @iriszzw
 /drivers/pinmux/*it8xxx2*                 @ite
 /drivers/pm_cpu_ops/                      @carlocaione
-/drivers/ps2/                             @albertofloyd @franciscomunoz @scottwcpg
+/drivers/ps2/                             @franciscomunoz @scottwcpg
+/drivers/ps2/*xec*                        @franciscomunoz @scottwcpg
+/drivers/ps2/*npcx*                       @MulinChao @WealianLiao @ChiHuaL
 /drivers/pwm/*rv32m1*                     @henrikbrixandersen
 /drivers/pwm/*sam0*                       @nzmichaelh
 /drivers/pwm/*stm32*                      @gmarull
@@ -272,6 +281,7 @@
 /drivers/pwm/pwm_capture.c                @henrikbrixandersen
 /drivers/pwm/pwm_shell.c                  @henrikbrixandersen
 /drivers/pwm/*gecko*                      @sun681
+/drivers/pwm/*it8xxx2*                    @RuibinChang
 /drivers/sensor/                          @MaureenHelm
 /drivers/sensor/ams_iAQcore/              @alexanderwachter
 /drivers/sensor/ens210/                   @alexanderwachter
@@ -281,6 +291,7 @@
 /drivers/sensor/lsm*/                     @avisconti
 /drivers/sensor/mpr/                      @sven-hm
 /drivers/sensor/st*/                      @avisconti
+/drivers/serial/*b91*                     @yurvyn
 /drivers/serial/uart_altera_jtag_hal.c    @nashif
 /drivers/serial/*ns16550*                 @dcpleung @nashif @jenmwms @aasthagr
 /drivers/serial/*nrfx*                    @Mierunski @anangl
@@ -296,6 +307,8 @@
 /drivers/serial/*nuvoton*                 @ssekar15
 /drivers/serial/*apbuart*                 @martin-aberg
 /drivers/serial/*rcar*                    @aaillet
+/drivers/serial/Kconfig.test              @str4t0m
+/drivers/serial/serial_test.c             @str4t0m
 /drivers/disk/                            @jfischer-no
 /drivers/disk/sdmmc_sdhc.h                @JunYangNXP
 /drivers/disk/sdmmc_spi.c                 @JunYangNXP
@@ -318,6 +331,7 @@
 /drivers/timer/stm32_lptim_timer.c        @FRASTM
 /drivers/timer/leon_gptimer.c             @martin-aberg
 /drivers/timer/rcar_cmt_timer.c           @julien-massot
+/drivers/timer/esp32c3_sys_timer.c        @uLipe
 /drivers/usb/                             @jfischer-no
 /drivers/usb/device/usb_dc_stm32.c        @ydamigos @loicpoulain
 /drivers/video/                           @loicpoulain
@@ -353,13 +367,13 @@
 /dts/arm64/armv8-r.dtsi                   @povergoing
 /dts/arm64/nxp/                           @JiafeiPan
 /dts/arm/quicklogic/                      @wtatarski @kowalewskijan @kgugala
+/dts/arm/seeed/                           @str4t0m
 /dts/arm/st/                              @erwango
 /dts/arm/ti/cc13?2*                       @bwitherspoon
 /dts/arm/ti/cc26?2*                       @bwitherspoon
 /dts/arm/ti/cc3235*                       @vanti
 /dts/arm/nordic/                          @ioannisg @carlescufi
-/dts/arm/nuvoton/                         @ssekar15
-/dts/arm/nuvoton/npcx/                    @MulinChao @WealianLiao @ChiHuaL
+/dts/arm/nuvoton/                         @ssekar15 @MulinChao @WealianLiao @ChiHuaL
 /dts/arm/nxp/                             @MaureenHelm @mmahadevan108 @dleach02
 /dts/arm/microchip/                       @franciscomunoz @albertofloyd @scottwcpg
 /dts/arm/silabs/efm32_pg_1b.dtsi          @rdmeneze
@@ -465,9 +479,9 @@
 /include/display/                         @vanwinkeljan
 /include/dt-bindings/clock/kinetis_mcg.h  @henrikbrixandersen
 /include/dt-bindings/clock/kinetis_scg.h  @henrikbrixandersen
-/include/dt-bindings/dma/stm32_dma.h      @cybertale
 /include/dt-bindings/ethernet/xlnx_gem.h  @ibirnbaum
 /include/dt-bindings/pcie/                @dcpleung
+/include/dt-bindings/pwm/*it8xxx2*        @RuibinChang
 /include/dt-bindings/usb/usb.h            @galak
 /include/drivers/emul.h                   @sjg20
 /include/fs/                              @nashif @nvlsianpu @de-nordic
@@ -549,6 +563,7 @@
 /scripts/coccicheck                       @himanshujha199640 @JuliaLawall
 /scripts/coccinelle/                      @himanshujha199640 @JuliaLawall
 /scripts/coredump/                        @dcpleung
+/scripts/footprint/                       @nashif
 /scripts/kconfig/                         @ulfalizer
 /scripts/logging/dictionary/              @dcpleung
 /scripts/pylib/twister/expr_parser.py     @nashif

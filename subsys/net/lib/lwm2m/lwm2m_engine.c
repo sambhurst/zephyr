@@ -1675,7 +1675,7 @@ static int lwm2m_engine_set(char *pathstr, void *value, uint16_t len)
 					 data_ptr, len, false, 0);
 	}
 
-	if (changed) {
+	if (changed && LWM2M_HAS_PERM(obj_field, LWM2M_PERM_R)) {
 		NOTIFY_OBSERVER_PATH(&path);
 	}
 
@@ -2299,7 +2299,7 @@ static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst,
 	}
 
 	loop_max = res->res_inst_count;
-	if (loop_max > 1) {
+	if (res->multi_res_inst) {
 		/* search for valid resource instances */
 		for (i = 0; i < loop_max; i++) {
 			if (res->res_instances[i].res_inst_id !=
@@ -2427,7 +2427,7 @@ static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst,
 		}
 	}
 
-	if (res->res_inst_count > 1) {
+	if (res->multi_res_inst) {
 		engine_put_end_ri(&msg->out, &msg->path);
 		msg->path.res_inst_id = res_inst_id_tmp;
 	}
@@ -2748,7 +2748,9 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst,
 
 	res_inst->data_len = len;
 
-	NOTIFY_OBSERVER_PATH(&msg->path);
+	if (LWM2M_HAS_PERM(obj_field, LWM2M_PERM_R)) {
+		NOTIFY_OBSERVER_PATH(&msg->path);
+	}
 
 	return ret;
 }
@@ -3653,6 +3655,7 @@ static int handle_request(struct coap_packet *request,
 	uint16_t payload_len = 0U;
 	bool last_block = false;
 	bool ignore = false;
+	const uint8_t *payload_start;
 
 	/* set CoAP request / message */
 	msg->in.in_cpkt = request;
@@ -3823,8 +3826,12 @@ static int handle_request(struct coap_packet *request,
 	}
 
 	/* setup incoming data */
-	msg->in.offset = msg->in.in_cpkt->hdr_len + msg->in.in_cpkt->opt_len;
-	coap_packet_get_payload(msg->in.in_cpkt, &payload_len);
+	payload_start = coap_packet_get_payload(msg->in.in_cpkt, &payload_len);
+	if (payload_len > 0) {
+		msg->in.offset = payload_start - msg->in.in_cpkt->data;
+	} else {
+		msg->in.offset = msg->in.in_cpkt->offset;
+	}
 
 	/* Check for block transfer */
 

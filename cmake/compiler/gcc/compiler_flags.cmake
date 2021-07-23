@@ -130,6 +130,10 @@ set_property(TARGET compiler-cpp PROPERTY dialect_cpp14 "-std=c++14" "-Wno-regis
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp17 "-std=c++17" "-Wno-register")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp2a "-std=c++2a"
   "-Wno-register" "-Wno-volatile")
+set_property(TARGET compiler-cpp PROPERTY dialect_cpp20 "-std=c++20"
+  "-Wno-register" "-Wno-volatile")
+set_property(TARGET compiler-cpp PROPERTY dialect_cpp2b "-std=c++2b"
+  "-Wno-register" "-Wno-volatile")
 
 # Disable exeptions flag in C++
 set_property(TARGET compiler-cpp PROPERTY no_exceptions "-fno-exceptions")
@@ -188,4 +192,6 @@ set_property(TARGET compiler-cpp PROPERTY no_threadsafe_statics "-fno-threadsafe
 set_property(TARGET asm PROPERTY required "-xassembler-with-cpp")
 
 # gcc flag for colourful diagnostic messages
+if (NOT COMPILER STREQUAL "xcc")
 set_compiler_property(PROPERTY diagnostic -fdiagnostics-color=always)
+endif()
