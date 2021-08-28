@@ -248,20 +248,10 @@ The four device power states:
 
    Device context is preserved by the HW and need not be restored by the driver.
 
-:code:`PM_DEVICE_STATE_SUSPEND`
+:code:`PM_DEVICE_STATE_SUSPENDED`
 
    Most device context is lost by the hardware. Device drivers must save and
    restore or reinitialize any context lost by the hardware.
-
-:code:`PM_DEVICE_STATE_SUSPENDING`
-
-   Device is currently transitioning from :c:macro:`PM_DEVICE_STATE_ACTIVE` to
-   :c:macro:`PM_DEVICE_STATE_SUSPEND`.
-
-:code:`PM_DEVICE_STATE_RESUMING`
-
-   Device is currently transitioning from :c:macro:`PM_DEVICE_STATE_SUSPEND` to
-   :c:macro:`PM_DEVICE_STATE_ACTIVE`.
 
 :code:`PM_DEVICE_STATE_OFF`
 
@@ -273,13 +263,8 @@ Device Power Management Operations
 ==================================
 
 Zephyr RTOS power management subsystem provides a control function interface
-to device drivers to indicate power management operations to perform.
-The supported PM control commands are:
-
-* PM_DEVICE_STATE_SET
-* PM_DEVICE_STATE_GET
-
-Each device driver defines:
+to device drivers to indicate power management operations to perform. Each
+device driver defines:
 
 * The device's supported power states.
 * The device's supported transitions between power states.
@@ -330,20 +315,17 @@ Device Set Power State
 
 .. code-block:: c
 
-   int pm_device_state_set(const struct device *dev, uint32_t device_power_state, pm_device_cb cb, void *arg);
+   int pm_device_state_set(const struct device *dev, enum pm_device_state state);
 
 Calls the :c:func:`pm_control()` handler function implemented by the
-device driver with PM_DEVICE_STATE_SET command.
+device driver with the provided state.
 
 Device Get Power State
 ----------------------
 
 .. code-block:: c
 
-   int pm_device_state_get(const struct device *dev, uint32_t * device_power_state);
-
-Calls the :c:func:`pm_control()` handler function implemented by the
-device driver with PM_DEVICE_STATE_GET command.
+   int pm_device_state_get(const struct device *dev, enum pm_device_state *state);
 
 Busy Status Indication
 ======================
@@ -402,6 +384,44 @@ Check Busy Status of All Devices API
    int device_any_busy_check(void);
 
 Checks if any device is busy. The API returns 0 if no device in the system is busy.
+
+Wakeup capability
+-----------------
+
+Some devices are capable of waking the system up from a sleep state.
+When a device has such capability, applications can enable or disable
+this feature on a device dynamically using
+:c:func:`pm_device_wakeup_enable`.
+
+This property can be set on device declaring the property ``wakeup-source`` in
+the device node in devicetree. For example, this devicetree fragment sets the
+``gpio0`` device as a "wakeup" source:
+
+.. code-block:: devicetree
+
+		gpio0: gpio@40022000 {
+			compatible = "ti,cc13xx-cc26xx-gpio";
+			reg = <0x40022000 0x400>;
+			interrupts = <0 0>;
+			status = "disabled";
+			label = "GPIO_0";
+			gpio-controller;
+			wakeup-source;
+			#gpio-cells = <2>;
+		};
+
+By default, "wakeup" capable devices do not have this functionality enabled
+during the device initialization. Applications can enable this functionality
+later calling :c:func:`pm_device_wakeup_enable`.
+
+.. note::
+
+   This property is **only** used by the system power management to identify
+   devices that should not be suspended.
+   It is responsability of driver or the application to do any additional
+   configuration required by the device to support it.
+
+
 
 Device Runtime Power Management
 *******************************

@@ -746,6 +746,11 @@ severity and the equivlent rules from other standards for reference.
       -  The size_t argument passed to any function in <string.h> shall have an appropriate value
       -  N/A
       -  `Rule 21.18 <https://gitlab.com/MISRA/MISRA-C/MISRA-C-2012/Example-Suite/-/blob/master/R_21_18.c>`_
+    * -  Rule 21.19
+      -  Mandatory
+      -  The pointers returned by the Standard Library functions localeconv, getenv, setlocale or, strerror shall only be used as if they have pointer to const-qualified type
+      -  N/A
+      -  `Rule 21.19 <https://gitlab.com/MISRA/MISRA-C/MISRA-C-2012/Example-Suite/-/blob/master/R_21_19.c>`_
     * -  Rule 21.20
       -  Mandatory
       -  The pointer returned by the Standard Library functions asctime, ctime, gmtime, localtime, localeconv, getenv, setlocale or strerror shall not be used following a subsequent call to the same function
@@ -756,6 +761,11 @@ severity and the equivlent rules from other standards for reference.
       -  All resources obtained dynamically by means of Standard Library functions shall be explicitly released
       -  N/A
       -  `Rule 22.1 <https://gitlab.com/MISRA/MISRA-C/MISRA-C-2012/Example-Suite/-/blob/master/R_22_01.c>`_
+    * -  Rule 22.2
+      -  Mandatory
+      -  A block of memory shall only be freed if it was allocated by means of a Standard Library function
+      -  N/A
+      -  `Rule 22.2 <https://gitlab.com/MISRA/MISRA-C/MISRA-C-2012/Example-Suite/-/blob/master/R_22_02.c>`_
     * -  Rule 22.3
       -  Required
       -  The same file shall not be open for read and write access at the same time on different streams

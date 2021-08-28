@@ -11,6 +11,8 @@
 
 #ifdef CONFIG_PCIE_MSI_MULTI_VECTOR
 
+#include <sys/mem_manage.h>
+
 __weak uint8_t arch_pcie_msi_vectors_allocate(unsigned int priority,
 					      msi_vector_t *vectors,
 					      uint8_t n_vector)
@@ -123,11 +125,9 @@ uint8_t pcie_msi_vectors_allocate(pcie_bdf_t bdf,
 
 		base_msix = pcie_get_cap(bdf, PCIE_MSIX_CAP_ID);
 		if (base_msix != 0U) {
+			msi = false;
 			base = base_msix;
 		}
-
-		msi = false;
-		base = base_msix;
 	}
 
 	if (IS_ENABLED(CONFIG_PCIE_MSI_X)) {
@@ -277,9 +277,10 @@ bool pcie_msi_enable(pcie_bdf_t bdf,
 		if ((base_msix != 0U) && (base != 0U)) {
 			disable_msi(bdf, base);
 		}
-
-		msi = false;
-		base = base_msix;
+		if ((base_msix != 0U)) {
+			msi = false;
+			base = base_msix;
+		}
 	}
 
 	if (base == 0U) {

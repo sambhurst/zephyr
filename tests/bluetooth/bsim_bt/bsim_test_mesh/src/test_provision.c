@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "mesh_test.h"
+#include "mesh/net.h"
+#include "argparse.h"
 
 #include <sys/byteorder.h>
 
@@ -28,7 +30,6 @@ enum test_flags {
 static ATOMIC_DEFINE(flags, TEST_FLAGS);
 extern const struct bt_mesh_comp comp;
 extern const uint8_t test_net_key[16];
-extern uint global_device_nbr;
 
 /* Timeout semaphore */
 static struct k_sem prov_sem;
@@ -41,7 +42,7 @@ static uint8_t dev_uuid[16] = { 0x6c, 0x69, 0x6e, 0x67, 0x61, 0x6f };
 static void test_device_init(void)
 {
 	/* Ensure that the UUID is unique: */
-	dev_uuid[6] = '0' + global_device_nbr;
+	dev_uuid[6] = '0' + get_device_nbr();
 
 	bt_mesh_test_cfg_set(NULL, WAIT_TIME);
 }
@@ -85,25 +86,6 @@ static struct bt_mesh_prov prov = {
 	.node_added = prov_node_added,
 };
 
-static void bt_mesh_device_setup(void)
-{
-	int err;
-
-	err = bt_enable(NULL);
-	if (err) {
-		FAIL("Bluetooth init failed (err %d)", err);
-		return;
-	}
-
-	LOG_INF("Bluetooth initialized");
-
-	err = bt_mesh_init(&prov, &comp);
-	if (err) {
-		FAIL("Initializing mesh failed (err %d)", err);
-		return;
-	}
-}
-
 /** @brief Verify that this device pb-adv provision.
  */
 static void test_device_pb_adv_no_oob(void)
@@ -112,7 +94,7 @@ static void test_device_pb_adv_no_oob(void)
 
 	k_sem_init(&prov_sem, 0, 1);
 
-	bt_mesh_device_setup();
+	bt_mesh_device_setup(&prov, &comp);
 
 	err = bt_mesh_prov_enable(BT_MESH_PROV_ADV);
 	ASSERT_OK(err, "Device PB-ADV Enable failed (err %d)", err);
@@ -134,7 +116,7 @@ static void test_provisioner_pb_adv_no_oob(void)
 
 	k_sem_init(&prov_sem, 0, 1);
 
-	bt_mesh_device_setup();
+	bt_mesh_device_setup(&prov, &comp);
 
 	err = bt_mesh_cdb_create(test_net_key);
 	ASSERT_OK(err, "Failed to create CDB (err %d)\n", err);
@@ -156,7 +138,7 @@ static void test_provisioner_pb_adv_multi(void)
 
 	k_sem_init(&prov_sem, 0, 1);
 
-	bt_mesh_device_setup();
+	bt_mesh_device_setup(&prov, &comp);
 
 	err = bt_mesh_cdb_create(test_net_key);
 	ASSERT_OK(err, "Failed to create CDB (err %d)\n", err);
@@ -167,6 +149,52 @@ static void test_provisioner_pb_adv_multi(void)
 	for (int i = 0; i < PROV_MULTI_COUNT; i++) {
 		ASSERT_OK(k_sem_take(&prov_sem, K_SECONDS(20)),
 			  "Provisioner provision #%d fail", i);
+	}
+
+	PASS();
+}
+
+/** @brief Verify that when the IV Update flag is set to zero at the
+ * time of provisioning, internal IV update counter is also zero.
+ */
+static void test_provisioner_iv_update_flag_zero(void)
+{
+	int err;
+	uint8_t flags = 0x00;
+
+	bt_mesh_device_setup(&prov, &comp);
+
+	err = bt_mesh_provision(test_net_key, 0, flags, 0, 0x0001, dev_key);
+	ASSERT_OK(err, "Provisioning failed (err %d)", err);
+
+	if (bt_mesh.ivu_duration != 0) {
+		FAIL("IV Update duration counter is not 0 when IV Update flag is zero");
+	}
+
+	PASS();
+}
+
+/** @brief Verify that when the IV Update flag is set to one at the
+ * time of provisioning, internal IV update counter is set to 96 hours.
+ */
+static void test_provisioner_iv_update_flag_one(void)
+{
+	int err;
+	uint8_t flags = 0x02; /* IV Update flag bit set to 1 */
+
+	bt_mesh_device_setup(&prov, &comp);
+
+	err = bt_mesh_provision(test_net_key, 0, flags, 0, 0x0001, dev_key);
+	ASSERT_OK(err, "Provisioning failed (err %d)", err);
+
+	if (bt_mesh.ivu_duration != 96) {
+		FAIL("IV Update duration counter is not 96 when IV Update flag is one");
+	}
+
+	bt_mesh_reset();
+
+	if (bt_mesh.ivu_duration != 0) {
+		FAIL("IV Update duration counter is not reset to 0");
 	}
 
 	PASS();
@@ -188,6 +216,10 @@ static const struct bst_test_instance test_connect[] = {
 		  "Provisioner: pb-adv provisioning use no-oob method"),
 	TEST_CASE(provisioner, pb_adv_multi,
 		  "Provisioner: pb-adv provisioning multiple devices"),
+	TEST_CASE(provisioner, iv_update_flag_zero,
+		  "Provisioner: effect on ivu_duration when IV Update flag is set to zero"),
+	TEST_CASE(provisioner, iv_update_flag_one,
+		  "Provisioner: effect on ivu_duration when IV Update flag is set to one"),
 
 	BSTEST_END_MARKER
 };

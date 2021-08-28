@@ -224,6 +224,24 @@ static inline int64_t arithmetic_shift_right(int64_t value, uint8_t shift)
 }
 
 /**
+ * @brief byte by byte memcpy.
+ *
+ * Copy `size` bytes of `src` into `dest`. This is guaranteed to be done byte by byte.
+ *
+ * @param dst Pointer to the destination memory.
+ * @param src Pointer to the source of the data.
+ * @param size The number of bytes to copy.
+ */
+static inline void bytecpy(void *dst, const void *src, size_t size)
+{
+	size_t i;
+
+	for (i = 0; i < size; ++i) {
+		((uint8_t *)dst)[i] = ((uint8_t *)src)[i];
+	}
+}
+
+/**
  * @brief      Convert a single character into a hexadecimal nibble.
  *
  * @param c     The character to convert
@@ -304,46 +322,6 @@ uint8_t u8_to_dec(char *buf, uint8_t buflen, uint8_t value);
 #define KHZ(x) ((x) * 1000)
 /** @brief Number of Hz in @p x MHz */
 #define MHZ(x) (KHZ(x) * 1000)
-
-#ifndef BIT
-#if defined(_ASMLANGUAGE)
-#define BIT(n)  (1 << (n))
-#else
-/**
- * @brief Unsigned integer with bit position @p n set (signed in
- * assembly language).
- */
-#define BIT(n)  (1UL << (n))
-#endif
-#endif
-
-/** @brief 64-bit unsigned integer with bit position @p _n set. */
-#define BIT64(_n) (1ULL << (_n))
-
-/**
- * @brief Set or clear a bit depending on a boolean value
- *
- * The argument @p var is a variable whose value is written to as a
- * side effect.
- *
- * @param var Variable to be altered
- * @param bit Bit number
- * @param set if 0, clears @p bit in @p var; any other value sets @p bit
- */
-#define WRITE_BIT(var, bit, set) \
-	((var) = (set) ? ((var) | BIT(bit)) : ((var) & ~BIT(bit)))
-
-/**
- * @brief Bit mask with bits 0 through <tt>n-1</tt> (inclusive) set,
- * or 0 if @p n is 0.
- */
-#define BIT_MASK(n) (BIT(n) - 1UL)
-
-/**
- * @brief 64-bit bit mask with bits 0 through <tt>n-1</tt> (inclusive) set,
- * or 0 if @p n is 0.
- */
-#define BIT64_MASK(n) (BIT64(n) - 1ULL)
 
 /**
  * @}

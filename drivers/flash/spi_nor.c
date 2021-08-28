@@ -38,8 +38,8 @@ LOG_MODULE_REGISTER(spi_nor, CONFIG_FLASH_LOG_LEVEL);
  *
  * When mapped to the Zephyr Device Power Management states:
  * * PM_DEVICE_STATE_ACTIVE covers both active and standby modes;
- * * PM_DEVICE_STATE_LOW_POWER, PM_DEVICE_STATE_SUSPEND, and
- *   PM_DEVICE_STATE_OFF all correspond to deep-power-down mode.
+ * * PM_DEVICE_STATE_SUSPENDED, and PM_DEVICE_STATE_OFF all correspond to
+ *   deep-power-down mode.
  */
 
 #define SPI_NOR_MAX_ADDR_WIDTH 4
@@ -607,7 +607,7 @@ static int spi_nor_write(const struct device *dev, off_t addr,
 		}
 	}
 
-	int ret2 = spi_nor_write_protection_set(dev, false);
+	int ret2 = spi_nor_write_protection_set(dev, true);
 
 	if (!ret) {
 		ret = ret2;

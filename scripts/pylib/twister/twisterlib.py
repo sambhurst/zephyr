@@ -2008,7 +2008,7 @@ class CMake():
             ldflags = "-Wl,--fatal-warnings"
             cflags = "-Werror"
             aflags = "-Wa,--fatal-warnings"
-            gen_defines_args = "--err-on-deprecated-properties"
+            gen_defines_args = "--edtlib-Werror"
         else:
             ldflags = cflags = aflags = ""
             gen_defines_args = ""
@@ -3271,8 +3271,8 @@ class TestSuite(DisablePyTestCollectionMixin):
         for instance in self.discards:
             instance.reason = self.discards[instance]
             # If integration mode is on all skips on integration_platforms are treated as errors.
-            # TODO: add quarantine relief here when PR with quarantine feature gets merged
-            if self.integration and instance.platform.name in instance.testcase.integration_platforms:
+            if self.integration and instance.platform.name in instance.testcase.integration_platforms \
+                and "Quarantine" not in instance.reason:
                 instance.status = "error"
                 instance.reason += " but is one of the integration platforms"
                 instance.fill_results_by_status()
@@ -3310,16 +3310,16 @@ class TestSuite(DisablePyTestCollectionMixin):
             if build_only:
                 instance.run = False
 
-            if test_only and instance.run:
-                pipeline.put({"op": "run", "test": instance})
-            else:
-                if instance.status not in ['passed', 'skipped', 'error']:
-                    logger.debug(f"adding {instance.name}")
-                    instance.status = None
+            if instance.status not in ['passed', 'skipped', 'error']:
+                logger.debug(f"adding {instance.name}")
+                instance.status = None
+                if test_only and instance.run:
+                    pipeline.put({"op": "run", "test": instance})
+                else:
                     pipeline.put({"op": "cmake", "test": instance})
-                # If the instance got 'error' status before, proceed to the report stage
-                if instance.status == "error":
-                    pipeline.put({"op": "report", "test": instance})
+            # If the instance got 'error' status before, proceed to the report stage
+            if instance.status == "error":
+                pipeline.put({"op": "report", "test": instance})
 
     def pipeline_mgr(self, pipeline, done_queue, lock, results):
         while True:
@@ -3736,12 +3736,12 @@ class CoverageTool:
         return t
 
     @staticmethod
-    def retrieve_gcov_data(intput_file):
-        logger.debug("Working on %s" % intput_file)
+    def retrieve_gcov_data(input_file):
+        logger.debug("Working on %s" % input_file)
         extracted_coverage_info = {}
         capture_data = False
         capture_complete = False
-        with open(intput_file, 'r') as fp:
+        with open(input_file, 'r') as fp:
             for line in fp.readlines():
                 if re.search("GCOV_COVERAGE_DUMP_START", line):
                     capture_data = True

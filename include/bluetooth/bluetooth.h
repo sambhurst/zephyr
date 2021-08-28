@@ -704,6 +704,14 @@ struct bt_le_per_adv_param {
 						BT_GAP_ADV_FAST_INT_MAX_2, \
 						NULL)
 
+/** Scannable extended advertising with @ref BT_LE_ADV_OPT_USE_NAME */
+#define BT_LE_EXT_ADV_SCAN_NAME BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV | \
+						BT_LE_ADV_OPT_SCANNABLE | \
+						BT_LE_ADV_OPT_USE_NAME, \
+						BT_GAP_ADV_FAST_INT_MIN_2, \
+						BT_GAP_ADV_FAST_INT_MAX_2, \
+						NULL)
+
 /** Non-connectable extended advertising with private address */
 #define BT_LE_EXT_ADV_NCONN BT_LE_ADV_PARAM(BT_LE_ADV_OPT_EXT_ADV, \
 					    BT_GAP_ADV_FAST_INT_MIN_2, \
@@ -799,8 +807,8 @@ struct bt_le_per_adv_param {
 		BT_LE_PER_ADV_PARAM_INIT(_int_min, _int_max, _options) \
 	})
 
-#define BT_LE_PER_ADV_DEFAULT BT_LE_PER_ADV_PARAM(BT_GAP_ADV_SLOW_INT_MIN, \
-						  BT_GAP_ADV_SLOW_INT_MAX, \
+#define BT_LE_PER_ADV_DEFAULT BT_LE_PER_ADV_PARAM(BT_GAP_PER_ADV_SLOW_INT_MIN, \
+						  BT_GAP_PER_ADV_SLOW_INT_MAX, \
 						  BT_LE_PER_ADV_OPT_NONE)
 
 /**
@@ -972,6 +980,10 @@ int bt_le_ext_adv_set_data(struct bt_le_ext_adv *adv,
  * Update the advertising parameters. The function will return an error if the
  * advertiser set is currently advertising. Stop the advertising set before
  * calling this function.
+ *
+ * @note When changing the option @ref BT_LE_ADV_OPT_USE_NAME then
+ *       @ref bt_le_ext_adv_set_data needs to be called in order to update the
+ *       advertising data and scan response data.
  *
  * @param adv   Advertising set object.
  * @param param Advertising parameters.

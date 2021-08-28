@@ -26,7 +26,7 @@
 #
 # Under these restraints we use a second 'cmake_minimum_required'
 # invocation in every toplevel CMakeLists.txt.
-cmake_minimum_required(VERSION 3.13.1)
+cmake_minimum_required(VERSION 3.20.0)
 
 # CMP0002: "Logical target names must be globally unique"
 cmake_policy(SET CMP0002 NEW)
@@ -77,24 +77,6 @@ set(APPLICATION_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE PATH "Application B
 set(__build_dir ${CMAKE_CURRENT_BINARY_DIR}/zephyr)
 
 set(PROJECT_BINARY_DIR ${__build_dir})
-
-if(${CMAKE_VERSION} VERSION_EQUAL 3.19.0 OR
-   ${CMAKE_VERSION} VERSION_EQUAL 3.19.1)
-  message(WARNING "CMake 3.19.0/3.19.1 contains a bug regarding Toolchain/compiler "
-          "testing. Consider switching to a different CMake version.\n"
-          "See more here: \n"
-          "- https://github.com/zephyrproject-rtos/zephyr/issues/30232\n"
-          "- https://gitlab.kitware.com/cmake/cmake/-/issues/21497")
-  # This is a workaround for #30232.
-  # During Zephyr CMake invocation a plain C compiler is used for DTS.
-  # This results in the internal `CheckCompilerFlag.cmake` being included by CMake
-  # Later, when the full toolchain is configured, then `CMakeCheckCompilerFlag.cmake` is included.
-  # This overloads the `cmake_check_compiler_flag()` function, thus causing #30232.
-  # By manualy loading `CMakeCheckCompilerFlag.cmake` then `CheckCompilerFlag.cmake` will overload
-  # the functions (and thus win the battle), and because `include_guard(GLOBAL)` is used in
-  # `CMakeCheckCompilerFlag.cmake` this file will not be re-included later.
-  include(${CMAKE_ROOT}/Modules/Internal/CMakeCheckCompilerFlag.cmake)
-endif()
 
 message(STATUS "Application: ${APPLICATION_SOURCE_DIR}")
 
@@ -609,6 +591,11 @@ endif()
 include(${ZEPHYR_BASE}/cmake/target_toolchain.cmake)
 
 project(Zephyr-Kernel VERSION ${PROJECT_VERSION})
+
+# Add .S file extension suffix into CMAKE_ASM_SOURCE_FILE_EXTENSIONS,
+# because clang from OneApi can't recongnize them as asm files on
+# windows now.
+list(APPEND CMAKE_ASM_SOURCE_FILE_EXTENSIONS "S")
 enable_language(C CXX ASM)
 # The setup / configuration of the toolchain itself and the configuration of
 # supported compilation flags are now split, as this allows to use the toolchain

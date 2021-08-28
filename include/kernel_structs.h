@@ -34,11 +34,6 @@
 extern "C" {
 #endif
 
-#define K_NUM_PRIORITIES \
-	(CONFIG_NUM_COOP_PRIORITIES + CONFIG_NUM_PREEMPT_PRIORITIES + 1)
-
-#define K_NUM_PRIO_BITMAPS ((K_NUM_PRIORITIES + 31) >> 5)
-
 /*
  * Bitmask definitions for the struct k_thread.thread_state field.
  *
@@ -187,7 +182,7 @@ bool z_smp_cpu_mobile(void);
 
 #define _current_cpu ({ __ASSERT_NO_MSG(!z_smp_cpu_mobile()); \
 			arch_curr_cpu(); })
-#define _current k_current_get()
+#define _current z_current_get()
 
 #else
 #define _current_cpu (&_kernel.cpus[0])

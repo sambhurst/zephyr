@@ -19,6 +19,8 @@
 # 3.3.1 Toolchain integration
 # 3.4. Debugging CMake
 # 3.5. File system management
+# 4. Devicetree extensions
+# 4.1 dt_*
 
 ########################################################
 # 1. Zephyr-aware extensions
@@ -1094,16 +1096,17 @@ endfunction(zephyr_check_compiler_flag_hardcoded)
 #    Preprocessor directives work inside <files>. Relative paths are resolved
 #    relative to the calling file, like zephyr_sources().
 # <location> is one of
-#    NOINIT       Inside the noinit output section.
-#    RWDATA       Inside the data output section.
-#    RODATA       Inside the rodata output section.
-#    ROM_START    Inside the first output section of the image. This option is
-#                 currently only available on ARM Cortex-M, ARM Cortex-R,
-#                 x86, ARC, openisa_rv32m1, and RISC-V.
-#                 Note: On RISC-V the rom_start section will be after vector section.
-#    RAM_SECTIONS Inside the RAMABLE_REGION GROUP.
-#    SECTIONS     Near the end of the file. Don't use this when linking into
-#                 RAMABLE_REGION, use RAM_SECTIONS instead.
+#    NOINIT        Inside the noinit output section.
+#    RWDATA        Inside the data output section.
+#    RODATA        Inside the rodata output section.
+#    ROM_START     Inside the first output section of the image. This option is
+#                  currently only available on ARM Cortex-M, ARM Cortex-R,
+#                  x86, ARC, openisa_rv32m1, and RISC-V.
+#                  Note: On RISC-V the rom_start section will be after vector section.
+#    RAM_SECTIONS  Inside the RAMABLE_REGION GROUP, not initialized.
+#    DATA_SECTIONS Inside the RAMABLE_REGION GROUP, initialized.
+#    SECTIONS      Near the end of the file. Don't use this when linking into
+#                  RAMABLE_REGION, use RAM_SECTIONS instead.
 # <sort_key> is an optional key to sort by inside of each location. The key must
 #    be alphanumeric, and the keys are sorted alphabetically. If no key is
 #    given, the key 'default' is used. Keys are case-sensitive.
@@ -1118,8 +1121,8 @@ endfunction(zephyr_check_compiler_flag_hardcoded)
 #    _mysection_end = .;
 #    _mysection_size = ABSOLUTE(_mysection_end - _mysection_start);
 #
-# When placing into SECTIONS or RAM_SECTIONS, the files must instead define
-# their own output sections to achieve the same thing:
+# When placing into SECTIONS, RAM_SECTIONS or DATA_SECTIONS, the files must
+# instead define their own output sections to achieve the same thing:
 #    SECTION_PROLOGUE(.mysection,,)
 #    {
 #        _mysection_start = .;
@@ -1137,19 +1140,21 @@ endfunction(zephyr_check_compiler_flag_hardcoded)
 function(zephyr_linker_sources location)
   # Set up the paths to the destination files. These files are #included inside
   # the global linker.ld.
-  set(snippet_base      "${__build_dir}/include/generated")
-  set(sections_path     "${snippet_base}/snippets-sections.ld")
-  set(ram_sections_path "${snippet_base}/snippets-ram-sections.ld")
-  set(rom_start_path    "${snippet_base}/snippets-rom-start.ld")
-  set(noinit_path       "${snippet_base}/snippets-noinit.ld")
-  set(rwdata_path       "${snippet_base}/snippets-rwdata.ld")
-  set(rodata_path       "${snippet_base}/snippets-rodata.ld")
+  set(snippet_base       "${__build_dir}/include/generated")
+  set(sections_path      "${snippet_base}/snippets-sections.ld")
+  set(ram_sections_path  "${snippet_base}/snippets-ram-sections.ld")
+  set(data_sections_path "${snippet_base}/snippets-data-sections.ld")
+  set(rom_start_path     "${snippet_base}/snippets-rom-start.ld")
+  set(noinit_path        "${snippet_base}/snippets-noinit.ld")
+  set(rwdata_path        "${snippet_base}/snippets-rwdata.ld")
+  set(rodata_path        "${snippet_base}/snippets-rodata.ld")
 
   # Clear destination files if this is the first time the function is called.
   get_property(cleared GLOBAL PROPERTY snippet_files_cleared)
   if (NOT DEFINED cleared)
     file(WRITE ${sections_path} "")
     file(WRITE ${ram_sections_path} "")
+    file(WRITE ${data_sections_path} "")
     file(WRITE ${rom_start_path} "")
     file(WRITE ${noinit_path} "")
     file(WRITE ${rwdata_path} "")
@@ -1162,6 +1167,8 @@ function(zephyr_linker_sources location)
     set(snippet_path "${sections_path}")
   elseif("${location}" STREQUAL "RAM_SECTIONS")
     set(snippet_path "${ram_sections_path}")
+  elseif("${location}" STREQUAL "DATA_SECTIONS")
+    set(snippet_path "${data_sections_path}")
   elseif("${location}" STREQUAL "ROM_START")
     set(snippet_path "${rom_start_path}")
   elseif("${location}" STREQUAL "NOINIT")
@@ -1386,20 +1393,8 @@ function(zephyr_library_sources_ifdef feature_toggle source)
   endif()
 endfunction()
 
-function(zephyr_library_sources_ifndef feature_toggle source)
-  if(NOT ${feature_toggle})
-    zephyr_library_sources(${source} ${ARGN})
-  endif()
-endfunction()
-
 function(zephyr_sources_ifdef feature_toggle)
   if(${${feature_toggle}})
-    zephyr_sources(${ARGN})
-  endif()
-endfunction()
-
-function(zephyr_sources_ifndef feature_toggle)
-   if(NOT ${feature_toggle})
     zephyr_sources(${ARGN})
   endif()
 endfunction()
@@ -1446,6 +1441,12 @@ function(zephyr_library_compile_definitions_ifdef feature_toggle item)
   endif()
 endfunction()
 
+function(zephyr_library_include_directories_ifdef feature_toggle)
+  if(${${feature_toggle}})
+    zephyr_library_include_directories(${ARGN})
+  endif()
+endfunction()
+
 function(zephyr_library_compile_options_ifdef feature_toggle item)
   if(${${feature_toggle}})
     zephyr_library_compile_options(${item} ${ARGN})
@@ -1484,9 +1485,63 @@ function(set_ifndef variable value)
   endif()
 endfunction()
 
+function(add_subdirectory_ifndef feature_toggle source_dir)
+  if(NOT ${feature_toggle})
+    add_subdirectory(${source_dir} ${ARGN})
+  endif()
+endfunction()
+
+function(target_sources_ifndef feature_toggle target scope item)
+  if(NOT ${feature_toggle})
+    target_sources(${target} ${scope} ${item} ${ARGN})
+  endif()
+endfunction()
+
+function(target_compile_definitions_ifndef feature_toggle target scope item)
+  if(NOT ${feature_toggle})
+    target_compile_definitions(${target} ${scope} ${item} ${ARGN})
+  endif()
+endfunction()
+
+function(target_include_directories_ifndef feature_toggle target scope item)
+  if(NOT ${feature_toggle})
+    target_include_directories(${target} ${scope} ${item} ${ARGN})
+  endif()
+endfunction()
+
+function(target_link_libraries_ifndef feature_toggle target item)
+  if(NOT ${feature_toggle})
+    target_link_libraries(${target} ${item} ${ARGN})
+  endif()
+endfunction()
+
+function(add_compile_option_ifndef feature_toggle option)
+  if(NOT ${feature_toggle})
+    add_compile_options(${option})
+  endif()
+endfunction()
+
+function(target_compile_option_ifndef feature_toggle target scope option)
+  if(NOT ${feature_toggle})
+    target_compile_options(${target} ${scope} ${option})
+  endif()
+endfunction()
+
 function(target_cc_option_ifndef feature_toggle target scope option)
   if(NOT ${feature_toggle})
     target_cc_option(${target} ${scope} ${option})
+  endif()
+endfunction()
+
+function(zephyr_library_sources_ifndef feature_toggle source)
+  if(NOT ${feature_toggle})
+    zephyr_library_sources(${source} ${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_sources_ifndef feature_toggle)
+   if(NOT ${feature_toggle})
+    zephyr_sources(${ARGN})
   endif()
 endfunction()
 
@@ -1496,11 +1551,77 @@ function(zephyr_cc_option_ifndef feature_toggle)
   endif()
 endfunction()
 
+function(zephyr_ld_option_ifndef feature_toggle)
+  if(NOT ${feature_toggle})
+    zephyr_ld_options(${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_link_libraries_ifndef feature_toggle)
+  if(NOT ${feature_toggle})
+    zephyr_link_libraries(${ARGN})
+  endif()
+endfunction()
+
 function(zephyr_compile_options_ifndef feature_toggle)
   if(NOT ${feature_toggle})
     zephyr_compile_options(${ARGN})
   endif()
 endfunction()
+
+function(zephyr_compile_definitions_ifndef feature_toggle)
+  if(NOT ${feature_toggle})
+    zephyr_compile_definitions(${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_include_directories_ifndef feature_toggle)
+  if(NOT ${feature_toggle})
+    zephyr_include_directories(${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_library_compile_definitions_ifndef feature_toggle item)
+  if(NOT ${feature_toggle})
+    zephyr_library_compile_definitions(${item} ${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_library_include_directories_ifndef feature_toggle)
+  if(NOT ${feature_toggle})
+    zephyr_library_include_directories(${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_library_compile_options_ifndef feature_toggle item)
+  if(NOT ${feature_toggle})
+    zephyr_library_compile_options(${item} ${ARGN})
+  endif()
+endfunction()
+
+function(zephyr_link_interface_ifndef feature_toggle interface)
+  if(NOT ${feature_toggle})
+    target_link_libraries(${interface} INTERFACE zephyr_interface)
+  endif()
+endfunction()
+
+function(zephyr_library_link_libraries_ifndef feature_toggle item)
+  if(NOT ${feature_toggle})
+     zephyr_library_link_libraries(${item})
+  endif()
+endfunction()
+
+function(zephyr_linker_sources_ifndef feature_toggle)
+  if(NOT ${feature_toggle})
+    zephyr_linker_sources(${ARGN})
+  endif()
+endfunction()
+
+macro(list_append_ifndef feature_toggle list)
+  if(NOT ${feature_toggle})
+    list(APPEND ${list} ${ARGN})
+  endif()
+endmacro()
 
 # 3.3. *_option Compiler-compatibility checks
 #
@@ -2255,4 +2376,436 @@ function(target_byproducts)
                      BYPRODUCTS ${TB_BYPRODUCTS}
                      COMMENT "Logical command for additional byproducts on target: ${TB_TARGET}"
   )
+endfunction()
+
+########################################################
+# 4. Zephyr devicetree function
+########################################################
+# 4.1. dt_*
+#
+# The following methods are for retrieving devicetree information in CMake.
+#
+# Note: In CMake we refer to the nodes using the node's path, therefore there
+# is no dt_path(...) function for obtaining a node identifier.
+
+# Usage:
+#   dt_nodelabel(<var> NODELABEL <label>)
+#
+# Function for retrieving the node path for the node having nodelabel
+# <label>.
+#
+# Example devicetree fragment:
+#
+#   / {
+#           soc {
+#                   nvic: interrupt-controller@e000e100  { ... };
+#           };
+#   };
+#
+# Example usage:
+#
+#   # Sets 'nvic_path' to "/soc/interrupt-controller@e000e100"
+#   dt_nodelabel(nvic_path NODELABEL "nvic")
+#
+# The node's path will be returned in the <var> parameter.
+# <var> will be undefined if node does not exist.
+#
+# <var>              : Return variable where the node path will be stored
+# NODELABEL <label>  : Node label
+function(dt_nodelabel var)
+  set(req_single_args "NODELABEL")
+  cmake_parse_arguments(DT_LABEL "" "${req_single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_nodelabel(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_LABEL_${arg})
+      message(FATAL_ERROR "dt_nodelabel(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  get_target_property(${var} devicetree_target "DT_NODELABEL|${DT_LABEL_NODELABEL}")
+  if(${${var}} STREQUAL ${var}-NOTFOUND)
+    set(${var})
+  endif()
+
+  set(${var} ${${var}} PARENT_SCOPE)
+endfunction()
+
+# Usage:
+#   dt_node_exists(<var> PATH <path>)
+#
+# Tests whether a node with path <path> exists in the devicetree.
+#
+# The result of the check, either TRUE or FALSE, will be returned in
+# the <var> parameter.
+#
+# <var>       : Return variable where the check result will be returned
+# PATH <path> : Node path
+function(dt_node_exists var)
+  set(req_single_args "PATH")
+  cmake_parse_arguments(DT_NODE "" "${req_single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_node_existsl(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_NODE_${arg})
+      message(FATAL_ERROR "dt_node_exists(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  get_target_property(${var} devicetree_target "DT_NODE|${DT_NODE_PATH}")
+
+  if(${var})
+    set(${var} ${${var}} PARENT_SCOPE)
+  else()
+    set(${var} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Usage:
+#   dt_node_has_status(<var> PATH <path> STATUS <status>)
+#
+# Tests whether <path> refers to a node which:
+# - exists in the devicetree, and
+# - has a status property matching the <status> argument
+#   (a missing status or an “ok” status is treated as if it
+#    were “okay” instead)
+#
+# The result of the check, either TRUE or FALSE, will be returned in
+# the <var> parameter.
+#
+# <var>           : Return variable where the check result will be returned
+# PATH <path>     : Node path
+# STATUS <status> : Status to check
+function(dt_node_has_status var)
+  set(req_single_args "PATH;STATUS")
+  cmake_parse_arguments(DT_NODE "" "${req_single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_node_has_status(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_NODE_${arg})
+      message(FATAL_ERROR "dt_node_has_status(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  dt_node_exists(${var} PATH ${DT_NODE_PATH})
+  if(NOT ${${var}})
+    set(${var} FALSE PARENT_SCOPE)
+  endif()
+
+  dt_prop(${var} PATH ${DT_NODE_PATH} PROPERTY status)
+
+  if(NOT DEFINED ${var} OR "${${var}}" STREQUAL ok)
+    set(${var} okay)
+  endif()
+
+  if(${var} STREQUAL ${DT_NODE_STATUS})
+    set(${var} TRUE PARENT_SCOPE)
+  else()
+    set(${var} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Usage:
+#
+#   dt_prop(<var> PATH <path> PROPERTY <prop> [INDEX <idx>])
+#
+# Get a devicetree property value. The value will be returned in the
+# <var> parameter.
+#
+# This function currently only supports properties with the following
+# devicetree binding types: string, int, boolean, array, uint8-array,
+# string-array, path.
+#
+# For array valued properties (including uint8-array and
+# string-array), the entire array is returned as a CMake list unless
+# INDEX is given. If INDEX is given, just the array element at index
+# <idx> is returned.
+#
+# The property value will be returned in the <var> parameter if the
+# node exists and has a property <prop> with one of the above types.
+# <var> will be undefined otherwise.
+#
+# To test if the property is defined before using it, use DEFINED on
+# the return <var>, like this:
+#
+#   dt_prop(reserved_ranges PATH "/soc/gpio@deadbeef" PROPERTY "gpio-reserved-ranges")
+#   if(DEFINED reserved_ranges)
+#     # Node exists and has the "gpio-reserved-ranges" property.
+#   endif()
+#
+# To distinguish a missing node from a missing property, combine
+# dt_prop() and dt_node_exists(), like this:
+#
+#   dt_node_exists(node_exists PATH "/soc/gpio@deadbeef")
+#   dt_prop(reserved_ranges    PATH "/soc/gpio@deadbeef" PROPERTY "gpio-reserved-ranges")
+#   if(DEFINED reserved_ranges)
+#     # Node "/soc/gpio@deadbeef" exists and has the "gpio-reserved-ranges" property
+#   elseif(node_exists)
+#     # Node exists, but doesn't have the property, or the property has an unsupported type.
+#   endif()
+#
+# <var>          : Return variable where the property value will be stored
+# PATH <path>    : Node path
+# PROPERTY <prop>: Property for which a value should be returned, as it
+#                  appears in the DTS source
+# INDEX <idx>    : Optional index when retrieving a value in an array property
+function(dt_prop var)
+  set(req_single_args "PATH;PROPERTY")
+  set(single_args "INDEX")
+  cmake_parse_arguments(DT_PROP "" "${req_single_args};${single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_prop(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_PROP_${arg})
+      message(FATAL_ERROR "dt_prop(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  get_property(exists TARGET devicetree_target
+      PROPERTY "DT_PROP|${DT_PROP_PATH}|${DT_PROP_PROPERTY}"
+      SET
+  )
+
+  if(NOT exists)
+    set(${var} PARENT_SCOPE)
+    return()
+  endif()
+
+  get_target_property(val devicetree_target
+      "DT_PROP|${DT_PROP_PATH}|${DT_PROP_PROPERTY}"
+  )
+
+  if(DEFINED DT_PROP_INDEX)
+    list(GET val ${DT_PROP_INDEX} element)
+    set(${var} "${element}" PARENT_SCOPE)
+  else()
+    set(${var} "${val}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+
+# Usage:
+#   dt_num_regs(<var> PATH <path>)
+#
+# Get the number of register blocks in the node's reg property;
+# this may be zero.
+#
+# The value will be returned in the <var> parameter.
+#
+# <var>          : Return variable where the property value will be stored
+# PATH <path>    : Node path
+function(dt_num_regs var)
+  set(req_single_args "PATH")
+  cmake_parse_arguments(DT_REG "" "${req_single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_num_regs(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_REG_${arg})
+      message(FATAL_ERROR "dt_num_regs(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  get_target_property(${var} devicetree_target "DT_REG|${DT_REG_PATH}|NUM")
+
+  set(${var} ${${var}} PARENT_SCOPE)
+endfunction()
+
+# Usage:
+#   dt_reg_addr(<var> PATH <path> [INDEX <idx>])
+#
+# Get the base address of the register block at index <idx>.
+# If <idx> is omitted, then the value at index 0 will be returned.
+#
+# The value will be returned in the <var> parameter.
+#
+# Results can be:
+# - The base address of the register block
+# - <var> will be undefined if node does not exists or does not have a register
+#   block at the requested index.
+#
+# <var>          : Return variable where the address value will be stored
+# PATH <path>    : Node path
+# INDEX <idx>    : Index number
+function(dt_reg_addr var)
+  set(req_single_args "PATH")
+  set(single_args "INDEX")
+  cmake_parse_arguments(DT_REG "" "${req_single_args};${single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_reg_addr(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_REG_${arg})
+      message(FATAL_ERROR "dt_reg_addr(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  if(NOT DEFINED DT_REG_INDEX)
+    set(DT_REG_INDEX 0)
+  endif()
+
+  get_target_property(${var}_list devicetree_target "DT_REG|${DT_REG_PATH}|ADDR")
+
+  list(GET ${var}_list ${DT_REG_INDEX} ${var})
+
+  if("${var}" STREQUAL NONE)
+    set(${var})
+  endif()
+
+  set(${var} ${${var}} PARENT_SCOPE)
+endfunction()
+
+# Usage:
+#   dt_reg_size(<var> PATH <path> [INDEX <idx>])
+#
+# Get the size of the register block at index <idx>.
+# If INDEX is omitted, then the value at index 0 will be returned.
+#
+# The value will be returned in the <value> parameter.
+#
+# <var>          : Return variable where the size value will be stored
+# PATH <path>    : Node path
+# INDEX <idx>    : Index number
+function(dt_reg_size var)
+  set(req_single_args "PATH")
+  set(single_args "INDEX")
+  cmake_parse_arguments(DT_REG "" "${req_single_args};${single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_reg_addr(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_REG_${arg})
+      message(FATAL_ERROR "dt_reg_addr(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  if(NOT DEFINED DT_REG_INDEX)
+    set(DT_REG_INDEX 0)
+  endif()
+
+  get_target_property(${var}_list devicetree_target "DT_REG|${DT_REG_PATH}|SIZE")
+
+  list(GET ${var}_list ${DT_REG_INDEX} ${var})
+
+  if("${var}" STREQUAL NONE)
+    set(${var})
+  endif()
+
+  set(${var} ${${var}} PARENT_SCOPE)
+endfunction()
+
+# Usage:
+#   dt_has_chosen(<var> PROPERTY <prop>)
+#
+# Test if the devicetree's /chosen node has a given property
+# <prop> which contains the path to a node.
+#
+# Example devicetree fragment:
+#
+#       chosen {
+#               foo = &bar;
+#       };
+#
+# Example usage:
+#
+#       # Sets 'result' to TRUE
+#       dt_has_chosen(result PROPERTY "foo")
+#
+#       # Sets 'result' to FALSE
+#       dt_has_chosen(result PROPERTY "baz")
+#
+# The result of the check, either TRUE or FALSE, will be stored in the
+# <var> parameter.
+#
+# <var>           : Return variable
+# PROPERTY <prop> : Chosen property
+function(dt_has_chosen var)
+  set(req_single_args "PROPERTY")
+  cmake_parse_arguments(DT_CHOSEN "" "${req_single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_has_chosen(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_CHOSEN_${arg})
+      message(FATAL_ERROR "dt_has_chosen(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  get_target_property(exists devicetree_target "DT_CHOSEN|${DT_CHOSEN_PROPERTY}")
+
+  if(${exists} STREQUAL exists-NOTFOUND)
+    set(${var} FALSE PARENT_SCOPE)
+  else()
+    set(${var} TRUE PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Usage:
+#   dt_chosen(<var> PROPERTY <prop>)
+#
+# Get a node path for a /chosen node property.
+#
+# the node path will be returned in the <value> parameter.
+#
+# <var>           : Return variable where the node path will be stored
+# PROPERTY <prop> : Chosen property
+function(dt_chosen var)
+  set(req_single_args "PROPERTY")
+  cmake_parse_arguments(DT_CHOSEN "" "${req_single_args}" "" ${ARGN})
+
+  if(${ARGV0} IN_LIST req_single_args)
+    message(FATAL_ERROR "dt_has_chosen(${ARGV0} ...) missing return parameter.")
+  endif()
+
+  foreach(arg ${req_single_args})
+    if(NOT DEFINED DT_CHOSEN_${arg})
+      message(FATAL_ERROR "dt_chosen(${ARGV0} ...) "
+                          "missing required argument: ${arg}"
+      )
+    endif()
+  endforeach()
+
+  get_target_property(${var} devicetree_target "DT_CHOSEN|${DT_CHOSEN_PROPERTY}")
+
+  if(${${var}} STREQUAL ${var}-NOTFOUND)
+    set(${var} PARENT_SCOPE)
+  else()
+    set(${var} ${${var}} PARENT_SCOPE)
+  endif()
 endfunction()

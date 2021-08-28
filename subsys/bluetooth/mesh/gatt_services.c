@@ -23,6 +23,7 @@
 #include "net.h"
 #include "rpl.h"
 #include "transport.h"
+#include "host/ecc.h"
 #include "prov.h"
 #include "beacon.h"
 #include "foundation.h"
@@ -375,7 +376,7 @@ static void node_id_start(struct bt_mesh_subnet *sub)
 	sub->node_id = BT_MESH_NODE_IDENTITY_RUNNING;
 	sub->node_id_start = k_uptime_get_32();
 
-	Z_STRUCT_SECTION_FOREACH(bt_mesh_proxy_cb, cb) {
+	STRUCT_SECTION_FOREACH(bt_mesh_proxy_cb, cb) {
 		if (cb->identity_enabled) {
 			cb->identity_enabled(sub->net_idx);
 		}
@@ -395,7 +396,7 @@ void bt_mesh_proxy_identity_stop(struct bt_mesh_subnet *sub)
 	sub->node_id = BT_MESH_NODE_IDENTITY_STOPPED;
 	sub->node_id_start = 0U;
 
-	Z_STRUCT_SECTION_FOREACH(bt_mesh_proxy_cb, cb) {
+	STRUCT_SECTION_FOREACH(bt_mesh_proxy_cb, cb) {
 		if (cb->identity_disabled) {
 			cb->identity_disabled(sub->net_idx);
 		}
@@ -639,7 +640,9 @@ static void subnet_evt(struct bt_mesh_subnet *sub, enum bt_mesh_key_evt evt)
 	}
 }
 
-BT_MESH_SUBNET_CB_DEFINE(subnet_evt);
+BT_MESH_SUBNET_CB_DEFINE(gatt_services) = {
+	.evt_handler = subnet_evt,
+};
 
 static void proxy_ccc_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
@@ -1107,7 +1110,7 @@ static size_t gatt_prov_adv_create(struct bt_data prov_sd[1])
 
 	prov_sd[0].type = BT_DATA_URI;
 	prov_sd[0].data_len = uri_len;
-	prov_sd[0].data = prov->uri;
+	prov_sd[0].data = (const uint8_t *)prov->uri;
 
 	return 1;
 }

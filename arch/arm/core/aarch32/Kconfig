@@ -29,7 +29,9 @@ config CPU_CORTEX_R
 	bool
 	select CPU_CORTEX
 	select HAS_CMSIS_CORE
+	select ARCH_HAS_NESTED_EXCEPTION_DETECTION
 	select HAS_FLASH_LOAD_OFFSET
+	select ARCH_HAS_USERSPACE if ARM_MPU
 	select ARCH_HAS_EXTRA_EXCEPTION_INFO
 	help
 	  This option signifies the use of a CPU of the Cortex-R family.
@@ -132,8 +134,8 @@ config RUNTIME_NMI
 config PLATFORM_SPECIFIC_INIT
 	bool "Enable platform (SOC) specific startup hook"
 	help
-	  The platform specific initialization code (z_platform_init) is executed
-	  at the beginning of the startup code (__start).
+	  The platform specific initialization code (z_arm_platform_init) is
+	  executed at the beginning of the startup code (__start).
 
 config FAULT_DUMP
 	int "Fault dump level"

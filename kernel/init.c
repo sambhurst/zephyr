@@ -41,7 +41,7 @@ LOG_MODULE_REGISTER(os, CONFIG_KERNEL_LOG_LEVEL);
 struct z_kernel _kernel;
 
 /* init/main and idle threads */
-K_THREAD_STACK_DEFINE(z_main_stack, CONFIG_MAIN_STACK_SIZE);
+K_THREAD_PINNED_STACK_DEFINE(z_main_stack, CONFIG_MAIN_STACK_SIZE);
 struct k_thread z_main_thread;
 
 #ifdef CONFIG_MULTITHREADING
@@ -198,11 +198,8 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	boot_banner();
 
 #if defined(CONFIG_CPLUSPLUS) && !defined(CONFIG_ARCH_POSIX)
-	/* Process the .ctors and .init_array sections */
-	extern void __do_global_ctors_aux(void);
-	extern void __do_init_array_aux(void);
-	__do_global_ctors_aux();
-	__do_init_array_aux();
+	void z_cpp_init_static(void);
+	z_cpp_init_static();
 #endif
 
 	/* Final init level before app starts */
@@ -219,6 +216,10 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 	z_sys_init_run_level(_SYS_INIT_LEVEL_SMP);
 #endif
 
+#ifdef CONFIG_MMU
+	z_mem_manage_boot_finish();
+#endif /* CONFIG_MMU */
+
 	extern void main(void);
 
 	main();
@@ -233,12 +234,6 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 } /* LCOV_EXCL_LINE ... because we just dumped final coverage data */
 
 /* LCOV_EXCL_START */
-
-void __weak main(void)
-{
-	/* NOP default main() if the application does not provide one. */
-	arch_nop();
-}
 
 /* LCOV_EXCL_STOP */
 

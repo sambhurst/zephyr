@@ -1291,22 +1291,42 @@ Synopsys Platforms:
     labels:
         - "platform: Synopsys"
 
-Nuvoton Platforms:
-    status: orphaned
-    collaborators:
+Nuvoton_NPCX Platforms:
+    status: maintained
+    maintainers:
         - MulinChao
-        - sjg20
-        - jackrosenthal
         - ChiHuaL
         - WealianLiao
+    collaborators:
+        - MulinChao
+        - ChiHuaL
+        - WealianLiao
+        - sjg20
+        - keith-zephyr
+        - jackrosenthal
+        - fabiobaltieri
+        - yperess
     files:
-        - soc/arm/nuvoton/
+        - soc/arm/nuvoton_npcx/
         - boards/arm/npcx*/
         - dts/arm/nuvoton/
-        - dts/bindings/*/nuvoton/*
+        - dts/bindings/*/*npcx*
         - drivers/*/*_npcx*
     labels:
-        - "platform: Nuvoton"
+        - "platform: Nuvoton_NPCX"
+
+Nuvoton_Numicro Platforms:
+    status: orphaned
+    collaborators:
+        - ssekar15
+    files:
+        - soc/arm/nuvoton_numicro/
+        - boards/arm/nuvoton_pfm*/
+        - dts/arm/nuvoton/
+        - dts/bindings/*/*numicro*
+        - drivers/*/*_numicro*
+    labels:
+        - "platform: Nuvoton_Numicro"
 
 SiLabs Platforms:
     status: orphaned
@@ -1425,12 +1445,18 @@ Espressif Platforms:
     status: maintained
     maintainers:
         - sylvioalves
+        - glaubermaroto
+        - ulipe
     files:
         - drivers/*/*esp32*
-        - boards/xtensa/esp32/
-        - soc/xtensa/esp32/
+        - boards/xtensa/esp32*/
+        - soc/xtensa/esp32*/
+        - boards/riscv/esp32*/
+        - soc/riscv/esp32*/
         - dts/xtensa/espressif/
+        - dts/riscv/espressif/
         - dts/bindings/*/*esp32*
+        - samples/boards/esp32*
     labels:
         - "platform: ESP32"
 

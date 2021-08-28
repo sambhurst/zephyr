@@ -5,6 +5,7 @@
 
 /*
  * Copyright (c) 2020 Intel Corporation
+ * Copyright (c) 2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,7 +14,6 @@
 #include <ctype.h>
 #include <zephyr.h>
 #include <shell/shell.h>
-#include <sys/printk.h>
 #include <sys/byteorder.h>
 #include <sys/util.h>
 
@@ -29,18 +29,19 @@
 static void iso_recv(struct bt_iso_chan *chan, const struct bt_iso_recv_info *info,
 		struct net_buf *buf)
 {
-	printk("Incoming data channel %p len %u, seq: %d, ts: %d\n", chan, buf->len,
-			info->sn, info->ts);
+	shell_print(ctx_shell, "Incoming data channel %p len %u, seq: %d, ts: %d",
+		    chan, buf->len, info->sn, info->ts);
 }
 
 static void iso_connected(struct bt_iso_chan *chan)
 {
-	printk("ISO Channel %p connected\n", chan);
+	shell_print(ctx_shell, "ISO Channel %p connected", chan);
 }
 
 static void iso_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 {
-	printk("ISO Channel %p disconnected with reason 0x%02x\n", chan, reason);
+	shell_print(ctx_shell, "ISO Channel %p disconnected with reason 0x%02x",
+		    chan, reason);
 }
 
 static struct bt_iso_chan_ops iso_ops = {
@@ -51,8 +52,6 @@ static struct bt_iso_chan_ops iso_ops = {
 
 #define DEFAULT_IO_QOS \
 { \
-	.interval	= 10000u, \
-	.latency	= 10u, \
 	.sdu		= 40u, \
 	.phy		= BT_GAP_LE_PHY_2M, \
 	.rtn		= 2u, \
@@ -62,25 +61,28 @@ static struct bt_iso_chan_io_qos iso_tx_qos = DEFAULT_IO_QOS;
 static struct bt_iso_chan_io_qos iso_rx_qos = DEFAULT_IO_QOS;
 
 static struct bt_iso_chan_qos iso_qos = {
-	.sca		= BT_GAP_SCA_UNKNOWN,
 	.tx		= &iso_tx_qos,
 	.rx		= &iso_rx_qos,
 };
+
+#if defined(CONFIG_BT_ISO_UNICAST)
+#define CIS_ISO_CHAN_COUNT 1
 
 struct bt_iso_chan iso_chan = {
 	.ops = &iso_ops,
 	.qos = &iso_qos,
 };
 
-#if defined(CONFIG_BT_ISO_UNICAST)
+static struct bt_iso_cig *cig;
+
 NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, DATA_MTU, NULL);
 
-static int iso_accept(struct bt_conn *conn, struct bt_iso_chan **chan)
+static int iso_accept(struct bt_conn *acl, struct bt_iso_chan **chan)
 {
-	printk("Incoming conn %p\n", conn);
+	shell_print(ctx_shell, "Incoming request from %p", acl);
 
-	if (iso_chan.conn) {
-		printk("No channels available\n");
+	if (iso_chan.iso) {
+		shell_print(ctx_shell, "No channels available");
 		return -ENOMEM;
 	}
 
@@ -130,23 +132,17 @@ static int cmd_listen(const struct shell *shell, size_t argc, char *argv[])
 	return err;
 }
 
-static int cmd_bind(const struct shell *shell, size_t argc, char *argv[])
+static int cmd_cig_create(const struct shell *sh, size_t argc, char *argv[])
 {
-	struct bt_conn *conns[1];
-	struct bt_iso_chan *chans[1];
 	int err;
+	struct bt_iso_cig_create_param param;
+	static struct bt_iso_chan *chans[CIS_ISO_CHAN_COUNT];
 
-	if (!default_conn) {
-		shell_error(shell, "Not connected");
-		return 0;
+	if (cig != NULL) {
+		shell_error(sh, "Already created");
+		return -ENOEXEC;
 	}
 
-	if (iso_chan.conn) {
-		shell_error(shell, "Already bound");
-		return 0;
-	}
-
-	conns[0] = default_conn;
 	chans[0] = &iso_chan;
 
 	if (argc > 1) {
@@ -163,31 +159,27 @@ static int cmd_bind(const struct shell *shell, size_t argc, char *argv[])
 	}
 
 	if (argc > 2) {
-		if (chans[0]->qos->tx) {
-			chans[0]->qos->tx->interval = strtol(argv[2], NULL, 0);
-		}
-
-		if (chans[0]->qos->rx) {
-			chans[0]->qos->rx->interval = strtol(argv[2], NULL, 0);
-		}
+		param.interval = strtol(argv[2], NULL, 0);
+	} else {
+		param.interval = 10000;
 	}
 
 	if (argc > 3) {
-		chans[0]->qos->packing = strtol(argv[3], NULL, 0);
+		param.packing = strtol(argv[3], NULL, 0);
+	} else {
+		param.packing = 0;
 	}
 
 	if (argc > 4) {
-		chans[0]->qos->framing = strtol(argv[4], NULL, 0);
+		param.framing = strtol(argv[4], NULL, 0);
+	} else {
+		param.framing = 0;
 	}
 
 	if (argc > 5) {
-		if (chans[0]->qos->tx) {
-			chans[0]->qos->tx->latency = strtol(argv[5], NULL, 0);
-		}
-
-		if (chans[0]->qos->rx) {
-			chans[0]->qos->rx->latency = strtol(argv[5], NULL, 0);
-		}
+		param.latency = strtol(argv[5], NULL, 0);
+	} else {
+		param.latency = 10;
 	}
 
 	if (argc > 6) {
@@ -220,36 +212,62 @@ static int cmd_bind(const struct shell *shell, size_t argc, char *argv[])
 		}
 	}
 
-	err = bt_iso_chan_bind(conns, 1, chans);
+	param.sca = BT_GAP_SCA_UNKNOWN;
+	param.cis_channels = chans;
+	param.num_cis = ARRAY_SIZE(chans);
+
+	err = bt_iso_cig_create(&param, &cig);
 	if (err) {
-		shell_error(shell, "Unable to bind (err %d)", err);
+		shell_error(sh, "Unable to create CIG (err %d)", err);
 		return 0;
 	}
 
-	shell_print(shell, "ISO Channel bound");
+	shell_print(sh, "CIG created");
 
 	return 0;
 }
 
-static int cmd_connect(const struct shell *shell, size_t argc, char *argv[])
+static int cmd_cig_term(const struct shell *sh, size_t argc, char *argv[])
 {
-	struct bt_iso_chan *chans[1];
 	int err;
 
-	if (!iso_chan.conn) {
-		shell_error(shell, "Not bound");
-		return 0;
+	if (cig == NULL) {
+		shell_error(sh, "CIG not created");
+		return -ENOEXEC;
 	}
 
-	chans[0] = &iso_chan;
-
-	err = bt_iso_chan_connect(chans, 1);
+	err = bt_iso_cig_terminate(cig);
 	if (err) {
-		shell_error(shell, "Unable to connect (err %d)", err);
+		shell_error(sh, "Unable to terminate CIG (err %d)", err);
 		return 0;
 	}
 
-	shell_print(shell, "ISO Connect pending...");
+	shell_print(sh, "CIG terminated");
+	cig = NULL;
+
+	return 0;
+}
+
+static int cmd_connect(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct bt_iso_connect_param connect_param = {
+		.acl = default_conn,
+		.iso_chan = &iso_chan
+	};
+	int err;
+
+	if (iso_chan.iso == NULL) {
+		shell_error(sh, "ISO channel not initialized in a CIG");
+		return 0;
+	}
+
+	err = bt_iso_chan_connect(&connect_param, 1);
+	if (err) {
+		shell_error(sh, "Unable to connect (err %d)", err);
+		return 0;
+	}
+
+	shell_print(sh, "ISO Connect pending...");
 
 	return 0;
 }
@@ -265,7 +283,7 @@ static int cmd_send(const struct shell *shell, size_t argc, char *argv[])
 		count = strtoul(argv[1], NULL, 10);
 	}
 
-	if (!iso_chan.conn) {
+	if (!iso_chan.iso) {
 		shell_error(shell, "Not bound");
 		return 0;
 	}
@@ -339,7 +357,7 @@ static int cmd_broadcast(const struct shell *shell, size_t argc, char *argv[])
 		count = strtoul(argv[1], NULL, 10);
 	}
 
-	if (!bis_iso_chan.conn) {
+	if (!bis_iso_chan.iso) {
 		shell_error(shell, "BIG not created");
 		return -ENOEXEC;
 	}
@@ -384,12 +402,12 @@ static int cmd_big_create(const struct shell *shell, size_t argc, char *argv[])
 
 	/* TODO: Allow setting QOS from shell */
 	bis_iso_qos.tx = &iso_tx_qos;
-	bis_iso_qos.tx->interval = 10000;      /* us */
-	bis_iso_qos.tx->latency = 20;          /* ms */
 	bis_iso_qos.tx->phy = BT_GAP_LE_PHY_2M; /* 2 MBit */
 	bis_iso_qos.tx->rtn = 2;
 	bis_iso_qos.tx->sdu = CONFIG_BT_ISO_TX_MTU;
 
+	param.interval = 10000;      /* us */
+	param.latency = 20;          /* ms */
 	param.bis_channels = bis_channels;
 	param.num_bis = BIS_ISO_CHAN_COUNT;
 	param.encryption = false;
@@ -498,8 +516,9 @@ static int cmd_big_term(const struct shell *shell, size_t argc, char *argv[])
 
 SHELL_STATIC_SUBCMD_SET_CREATE(iso_cmds,
 #if defined(CONFIG_BT_ISO_UNICAST)
-	SHELL_CMD_ARG(bind, NULL, "[dir=tx,rx,txrx] [interval] [packing] [framing] "
-		      "[latency] [sdu] [phy] [rtn]", cmd_bind, 1, 8),
+	SHELL_CMD_ARG(cig_create, NULL, "[dir=tx,rx,txrx] [interval] [packing] [framing] "
+		      "[latency] [sdu] [phy] [rtn]", cmd_cig_create, 1, 8),
+	SHELL_CMD_ARG(cig_term, NULL, "Terminate the CIG", cmd_cig_term, 1, 0),
 	SHELL_CMD_ARG(connect, NULL, "Connect ISO Channel", cmd_connect, 1, 0),
 	SHELL_CMD_ARG(listen, NULL, "<dir=tx,rx,txrx> [security level]", cmd_listen, 2, 1),
 	SHELL_CMD_ARG(send, NULL, "Send to ISO Channel [count]",

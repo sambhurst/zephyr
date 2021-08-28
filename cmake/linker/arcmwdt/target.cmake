@@ -112,13 +112,30 @@ macro(toolchain_ld_baremetal)
   zephyr_ld_options(
     -Hlld
     -Hnosdata
-    -Hnocrt
     -Xtimer0 # to suppress the warning message
     -Hnoxcheck_obj
     -Hnocplus
+    -Hhostlib=
     -Hheap=0
     -Hnoivt
   )
+
+  # We only use CPP initialization code from crt
+  if(NOT CONFIG_CPLUSPLUS)
+    zephyr_ld_options(-Hnocrt)
+  endif()
+
+  # There are two options:
+  # - We have full MWDT libc support and we link MWDT libc - this is default
+  #   behavior and we don't need to do something for that.
+  # - We use minimal libc provided by Zephyr itself. In that case we must not
+  #   link MWDT libc, but we still need to link libmw
+  if(CONFIG_MINIMAL_LIBC)
+    zephyr_ld_options(
+      -Hnolib
+      -Hldopt=-lmw
+    )
+  endif()
 
   # Funny thing is if this is set to =error, some architectures will
   # skip this flag even though the compiler flag check passes
@@ -179,7 +196,7 @@ endmacro()
 # link C++ libraries
 macro(toolchain_ld_cpp)
   zephyr_link_libraries(
-    -Hcppmw -Hcplus
+    -Hcplus
   )
 endmacro()
 

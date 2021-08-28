@@ -12,6 +12,7 @@
 #include "hal/radio.h"
 #include "hal/ticker.h"
 
+#include "util/util.h"
 #include "util/memq.h"
 #include "util/mayfly.h"
 
@@ -22,6 +23,7 @@
 #include "lll.h"
 #include "lll/lll_vendor.h"
 #include "lll_scan.h"
+#include "lll/lll_df_types.h"
 #include "lll_conn.h"
 
 #include "ull_scan_types.h"

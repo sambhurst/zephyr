@@ -25,6 +25,16 @@
 #include <fsl_common.h>
 #include <fsl_device_registers.h>
 #include <fsl_pint.h>
+#if CONFIG_USB_DC_NXP_LPCIP3511
+#include "usb_phy.h"
+#include "usb_dc_mcux.h"
+#endif
+
+#define CTIMER_CLOCK_SOURCE(node_id) \
+	TO_CTIMER_CLOCK_SOURCE(DT_CLOCKS_CELL(node_id, name), DT_PROP(node_id, clk_source))
+#define TO_CTIMER_CLOCK_SOURCE(inst, val) TO_CLOCK_ATTACH_ID(inst, val)
+#define TO_CLOCK_ATTACH_ID(inst, val) MUX_A(CM_CTIMERCLKSEL##inst, val)
+#define CTIMER_CLOCK_SETUP(node_id) CLOCK_AttachClk(CTIMER_CLOCK_SOURCE(node_id));
 
 /**
  *
@@ -94,6 +104,33 @@ static ALWAYS_INLINE void clock_init(void)
 	/* Reset the MAILBOX module */
 	RESET_PeripheralReset(kMAILBOX_RST_SHIFT_RSTn);
 #endif
+
+#if CONFIG_USB_DC_NXP_LPCIP3511
+	/* enable usb1 host clock */
+	CLOCK_EnableClock(kCLOCK_Usbh1);
+	/* Put PHY powerdown under software control */
+	*((uint32_t *)(USBHSH_BASE + 0x50)) = USBHSH_PORTMODE_SW_PDCOM_MASK;
+	/*
+	 * According to reference mannual, device mode setting has to be set by
+	 * access usb host register
+	 */
+	*((uint32_t *)(USBHSH_BASE + 0x50)) |= USBHSH_PORTMODE_DEV_ENABLE_MASK;
+	/* enable usb1 host clock */
+	CLOCK_DisableClock(kCLOCK_Usbh1);
+
+	/* enable USB IP clock */
+	CLOCK_EnableUsbhs0PhyPllClock(kCLOCK_UsbPhySrcExt, CLK_CLK_IN);
+	CLOCK_EnableUsbhs0DeviceClock(kCLOCK_UsbSrcUnused, 0U);
+	USB_EhciPhyInit(kUSB_ControllerLpcIp3511Hs0, CLK_CLK_IN, NULL);
+#if defined(FSL_FEATURE_USBHSD_USB_RAM) && (FSL_FEATURE_USBHSD_USB_RAM)
+	for (int i = 0; i < FSL_FEATURE_USBHSD_USB_RAM; i++) {
+		((uint8_t *)FSL_FEATURE_USBHSD_USB_RAM_BASE_ADDRESS)[i] = 0x00U;
+	}
+#endif
+
+#endif
+
+DT_FOREACH_STATUS_OKAY(nxp_lpc_ctimer, CTIMER_CLOCK_SETUP)
 
 #endif /* CONFIG_SOC_LPC55S69_CPU0 */
 }

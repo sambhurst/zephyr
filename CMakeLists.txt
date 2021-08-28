@@ -95,6 +95,11 @@ zephyr_compile_definitions(
   __ZEPHYR__=1
 )
 
+# Ensure that include/toolchain.h includes toolchain/other.h for all off-tree toolchains
+if(TOOLCHAIN_USE_CUSTOM)
+  zephyr_compile_definitions(__TOOLCHAIN_CUSTOM__)
+endif()
+
 # @Intent: Set compiler flags to enable buffer overflow checks in libc functions
 # @config in CONFIG_NO_OPTIMIZATIONS optional : Optimizations may affect security
 zephyr_compile_definitions($<TARGET_PROPERTY:compiler,security_fortify> )
@@ -350,6 +355,7 @@ endif()
 # Declare MPU userspace dependencies before the linker scripts to make
 # sure the order of dependencies are met
 if(CONFIG_USERSPACE)
+  add_custom_target(app_smem)
   set(APP_SMEM_ALIGNED_DEP app_smem_aligned_linker)
   set(APP_SMEM_UNALIGNED_DEP app_smem_unaligned_linker)
 endif()
@@ -980,18 +986,42 @@ toolchain_ld_configure_files()
 if(CONFIG_USERSPACE)
   set(APP_SMEM_ALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_aligned.ld")
   set(APP_SMEM_UNALIGNED_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem_unaligned.ld")
+
+  if(CONFIG_LINKER_USE_PINNED_SECTION)
+    set(APP_SMEM_PINNED_ALIGNED_LD
+         "${PROJECT_BINARY_DIR}/include/generated/app_smem_pinned_aligned.ld")
+    set(APP_SMEM_PINNED_UNALIGNED_LD
+         "${PROJECT_BINARY_DIR}/include/generated/app_smem_pinned_unaligned.ld")
+
+    if(NOT CONFIG_LINKER_GENERIC_SECTIONS_PRESENT_AT_BOOT)
+      # The libc partition may hold symbols that are required during boot process,
+      # for example, stack guard (if enabled). So the libc partition must be pinned
+      # if not sections are in physical memory at boot, as the paging mechanism is
+      # only initialized post-kernel.
+      set_property(TARGET app_smem APPEND PROPERTY pinned_partitions "z_libc_partition")
+    endif()
+
+    get_property(APP_SMEM_PINNED_PARTITION_LIST TARGET app_smem PROPERTY pinned_partitions)
+    if(APP_SMEM_PINNED_PARTITION_LIST)
+      list(JOIN APP_SMEM_PINNED_PARTITION_LIST "," APP_SMEM_PINNED_PARTITION_LIST_ARG_CSL)
+      set(APP_SMEM_PINNED_PARTITION_LIST_ARG "--pinpartitions=${APP_SMEM_PINNED_PARTITION_LIST_ARG_CSL}")
+    endif()
+  endif()
+
   set(OBJ_FILE_DIR "${PROJECT_BINARY_DIR}/../")
 
   add_custom_target(
     ${APP_SMEM_ALIGNED_DEP}
     DEPENDS
     ${APP_SMEM_ALIGNED_LD}
+    ${APP_SMEM_PINNED_ALIGNED_LD}
     )
 
   add_custom_target(
     ${APP_SMEM_UNALIGNED_DEP}
     DEPENDS
     ${APP_SMEM_UNALIGNED_LD}
+    ${APP_SMEM_PINNED_UNALIGNED_LD}
     )
 
   if(CONFIG_NEWLIB_LIBC)
@@ -1002,11 +1032,13 @@ if(CONFIG_USERSPACE)
   endif()
 
   add_custom_command(
-    OUTPUT ${APP_SMEM_UNALIGNED_LD}
+    OUTPUT ${APP_SMEM_UNALIGNED_LD} ${APP_SMEM_PINNED_UNALIGNED_LD}
     COMMAND ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
     -d ${OBJ_FILE_DIR}
     -o ${APP_SMEM_UNALIGNED_LD}
+    $<$<BOOL:${APP_SMEM_PINNED_UNALIGNED_LD}>:--pinoutput=${APP_SMEM_PINNED_UNALIGNED_LD}>
+    ${APP_SMEM_PINNED_PARTITION_LIST_ARG}
     ${NEWLIB_PART}
     $<TARGET_PROPERTY:zephyr_property_target,COMPILE_OPTIONS>
     $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
@@ -1024,6 +1056,7 @@ if(CONFIG_USERSPACE)
     ${CODE_RELOCATION_DEP}
     ${APP_SMEM_UNALIGNED_DEP}
     ${APP_SMEM_UNALIGNED_LD}
+    ${APP_SMEM_PINNED_UNALIGNED_LD}
     zephyr_generated_headers
     )
 
@@ -1056,11 +1089,13 @@ if(CONFIG_USERSPACE)
   add_dependencies(     app_smem_unaligned_prebuilt linker_app_smem_unaligned_script ${OFFSETS_LIB})
 
   add_custom_command(
-    OUTPUT ${APP_SMEM_ALIGNED_LD}
+    OUTPUT ${APP_SMEM_ALIGNED_LD} ${APP_SMEM_PINNED_ALIGNED_LD}
     COMMAND ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
     -e $<TARGET_FILE:app_smem_unaligned_prebuilt>
     -o ${APP_SMEM_ALIGNED_LD}
+    $<$<BOOL:${APP_SMEM_PINNED_ALIGNED_LD}>:--pinoutput=${APP_SMEM_PINNED_ALIGNED_LD}>
+    ${APP_SMEM_PINNED_PARTITION_LIST_ARG}
     ${NEWLIB_PART}
     $<TARGET_PROPERTY:zephyr_property_target,COMPILE_OPTIONS>
     $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
@@ -1468,8 +1503,8 @@ if(CONFIG_OUTPUT_STAT)
     COMMAND $<TARGET_PROPERTY:bintools,readelf_command>
             $<TARGET_PROPERTY:bintools,readelf_flag>
             $<TARGET_PROPERTY:bintools,readelf_flag_headers>
-            $<TARGET_PROPERTY:bintools,readelf_flag_infile> ${KERNEL_ELF_NAME}
-            $<TARGET_PROPERTY:bintools,readelf_flag_outfile> ${KERNEL_STAT_NAME}
+            $<TARGET_PROPERTY:bintools,readelf_flag_infile>${KERNEL_ELF_NAME}
+            $<TARGET_PROPERTY:bintools,readelf_flag_outfile>${KERNEL_STAT_NAME}
             $<TARGET_PROPERTY:bintools,readelf_flag_final>
     )
   list(APPEND

@@ -304,7 +304,7 @@ static ssize_t read_value(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 		return BT_GATT_ERR(BT_ATT_ERR_AUTHORIZATION);
 	}
 
-	if ((attr->perm & GATT_PERM_ENC_READ_MASK) &&
+	if ((attr->perm & GATT_PERM_ENC_READ_MASK) && (conn != NULL) &&
 	    (value->enc_key_size > bt_conn_enc_key_size(conn))) {
 		return BT_GATT_ERR(BT_ATT_ERR_ENCRYPTION_KEY_SIZE);
 	}
@@ -1385,7 +1385,7 @@ static uint8_t read_cb(struct bt_conn *conn, uint8_t err,
 	return BT_GATT_ITER_CONTINUE;
 }
 
-static void read(uint8_t *data, uint16_t len)
+static void read_data(uint8_t *data, uint16_t len)
 {
 	const struct gatt_read_cmd *cmd = (void *) data;
 	struct bt_conn *conn;
@@ -1528,7 +1528,8 @@ static void read_multiple(uint8_t *data, uint16_t len)
 
 	read_params.func = read_cb;
 	read_params.handle_count = i;
-	read_params.handles = handles; /* not used in read func */
+	read_params.multiple.handles = handles; /* not used in read func */
+	read_params.multiple.variable = false;
 
 	/* TODO should be handled as user_data via CONTAINER_OF macro */
 	btp_opcode = GATT_READ_MULTIPLE;
@@ -1583,7 +1584,7 @@ static void write_rsp(struct bt_conn *conn, uint8_t err,
 
 static struct bt_gatt_write_params write_params;
 
-static void write(uint8_t *data, uint16_t len)
+static void write_data(uint8_t *data, uint16_t len)
 {
 	const struct gatt_write_cmd *cmd = (void *) data;
 	struct bt_conn *conn;
@@ -2007,7 +2008,7 @@ void tester_handle_gatt(uint8_t opcode, uint8_t index, uint8_t *data,
 		disc_all_desc(data, len);
 		return;
 	case GATT_READ:
-		read(data, len);
+		read_data(data, len);
 		return;
 	case GATT_READ_UUID:
 		read_uuid(data, len);
@@ -2025,7 +2026,7 @@ void tester_handle_gatt(uint8_t opcode, uint8_t index, uint8_t *data,
 		write_without_rsp(data, len, opcode, true);
 		return;
 	case GATT_WRITE:
-		write(data, len);
+		write_data(data, len);
 		return;
 	case GATT_WRITE_LONG:
 		write_long(data, len);

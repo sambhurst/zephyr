@@ -548,7 +548,12 @@ static struct net_buf *create_frag(struct bt_conn *conn, struct net_buf *buf)
 		break;
 #endif
 	default:
+#if defined(CONFIG_BT_CONN)
 		frag = bt_conn_create_frag(0);
+#else
+		return NULL;
+#endif /* CONFIG_BT_CONN */
+
 	}
 
 	if (conn->state != BT_CONN_CONNECTED) {
@@ -842,10 +847,6 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 
 		break;
 	case BT_CONN_DISCONNECTED:
-		if (conn->type == BT_CONN_TYPE_ISO) {
-			break;
-		}
-
 #if defined(CONFIG_BT_CONN)
 		if (conn->type == BT_CONN_TYPE_SCO) {
 			/* TODO: Notify sco disconnected */
@@ -922,7 +923,6 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 			break;
 		}
 		break;
-#endif /* CONFIG_BT_CONN */
 	case BT_CONN_CONNECT_AUTO:
 		break;
 	case BT_CONN_CONNECT_ADV:
@@ -948,6 +948,7 @@ void bt_conn_set_state(struct bt_conn *conn, bt_conn_state_t state)
 		break;
 	case BT_CONN_DISCONNECT:
 		break;
+#endif /* CONFIG_BT_CONN */
 	case BT_CONN_DISCONNECT_COMPLETE:
 		process_unack_tx(conn);
 		break;
@@ -1056,7 +1057,7 @@ struct bt_conn *bt_conn_ref(struct bt_conn *conn)
 		}
 	} while (!atomic_cas(&conn->ref, old, old + 1));
 
-	BT_DBG("handle %u ref %u -> %u", conn->handle, old, old + 1);
+	BT_DBG("handle %u ref %d -> %d", conn->handle, old, old + 1);
 
 	return conn;
 }
@@ -1076,7 +1077,7 @@ void bt_conn_unref(struct bt_conn *conn)
 
 	old = atomic_dec(&conn->ref);
 
-	BT_DBG("handle %u ref %u -> %u", conn->handle, old,
+	BT_DBG("handle %u ref %d -> %d", conn->handle, old,
 	       atomic_get(&conn->ref));
 
 	__ASSERT(old > 0, "Conn reference counter is 0");
@@ -1118,6 +1119,68 @@ uint8_t bt_conn_index(struct bt_conn *conn)
 	}
 
 	return (uint8_t)index;
+}
+
+
+#if defined(CONFIG_NET_BUF_LOG)
+struct net_buf *bt_conn_create_pdu_timeout_debug(struct net_buf_pool *pool,
+						 size_t reserve,
+						 k_timeout_t timeout,
+						 const char *func, int line)
+#else
+struct net_buf *bt_conn_create_pdu_timeout(struct net_buf_pool *pool,
+					   size_t reserve, k_timeout_t timeout)
+#endif
+{
+	struct net_buf *buf;
+
+	/*
+	 * PDU must not be allocated from ISR as we block with 'K_FOREVER'
+	 * during the allocation
+	 */
+	__ASSERT_NO_MSG(!k_is_in_isr());
+
+	if (!pool) {
+#if defined(CONFIG_BT_CONN)
+		pool = &acl_tx_pool;
+#else
+		return NULL;
+#endif /* CONFIG_BT_CONN */
+	}
+
+	if (IS_ENABLED(CONFIG_BT_DEBUG_CONN)) {
+#if defined(CONFIG_NET_BUF_LOG)
+		buf = net_buf_alloc_fixed_debug(pool, K_NO_WAIT, func, line);
+#else
+		buf = net_buf_alloc(pool, K_NO_WAIT);
+#endif
+		if (!buf) {
+			BT_WARN("Unable to allocate buffer with K_NO_WAIT");
+#if defined(CONFIG_NET_BUF_LOG)
+			buf = net_buf_alloc_fixed_debug(pool, timeout, func,
+							line);
+#else
+			buf = net_buf_alloc(pool, timeout);
+#endif
+		}
+	} else {
+#if defined(CONFIG_NET_BUF_LOG)
+		buf = net_buf_alloc_fixed_debug(pool, timeout, func,
+							line);
+#else
+		buf = net_buf_alloc(pool, timeout);
+#endif
+	}
+
+	if (!buf) {
+		BT_WARN("Unable to allocate buffer within timeout");
+		return NULL;
+	}
+
+	reserve += sizeof(struct bt_hci_acl_hdr) + BT_BUF_RESERVE;
+	net_buf_reserve(buf, reserve);
+
+	return buf;
 }
 
 /* Group Connected BT_CONN only in this */
@@ -1200,6 +1263,12 @@ static void notify_connected(struct bt_conn *conn)
 		}
 	}
 
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
+		if (cb->connected) {
+			cb->connected(conn, conn->err);
+		}
+	}
+
 	if (!conn->err) {
 		bt_gatt_connected(conn);
 	}
@@ -1210,6 +1279,12 @@ static void notify_disconnected(struct bt_conn *conn)
 	struct bt_conn_cb *cb;
 
 	for (cb = callback_list; cb; cb = cb->_next) {
+		if (cb->disconnected) {
+			cb->disconnected(conn, conn->err);
+		}
+	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
 		if (cb->disconnected) {
 			cb->disconnected(conn, conn->err);
 		}
@@ -1230,6 +1305,12 @@ void notify_remote_info(struct bt_conn *conn)
 	}
 
 	for (cb = callback_list; cb; cb = cb->_next) {
+		if (cb->remote_info_available) {
+			cb->remote_info_available(conn, &remote_info);
+		}
+	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
 		if (cb->remote_info_available) {
 			cb->remote_info_available(conn, &remote_info);
 		}
@@ -1259,6 +1340,14 @@ void notify_le_param_updated(struct bt_conn *conn)
 					     conn->le.timeout);
 		}
 	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
+		if (cb->le_param_updated) {
+			cb->le_param_updated(conn, conn->le.interval,
+					     conn->le.latency,
+					     conn->le.timeout);
+		}
+	}
 }
 
 #if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
@@ -1267,6 +1356,12 @@ void notify_le_data_len_updated(struct bt_conn *conn)
 	struct bt_conn_cb *cb;
 
 	for (cb = callback_list; cb; cb = cb->_next) {
+		if (cb->le_data_len_updated) {
+			cb->le_data_len_updated(conn, &conn->le.data_len);
+		}
+	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
 		if (cb->le_data_len_updated) {
 			cb->le_data_len_updated(conn, &conn->le.data_len);
 		}
@@ -1284,6 +1379,12 @@ void notify_le_phy_updated(struct bt_conn *conn)
 			cb->le_phy_updated(conn, &conn->le.phy);
 		}
 	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
+		if (cb->le_phy_updated) {
+			cb->le_phy_updated(conn, &conn->le.phy);
+		}
+	}
 }
 #endif
 
@@ -1296,6 +1397,23 @@ bool le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 	}
 
 	for (cb = callback_list; cb; cb = cb->_next) {
+		if (!cb->le_param_req) {
+			continue;
+		}
+
+		if (!cb->le_param_req(conn, param)) {
+			return false;
+		}
+
+		/* The callback may modify the parameters so we need to
+		 * double-check that it returned valid parameters.
+		 */
+		if (!bt_le_conn_params_valid(param)) {
+			return false;
+		}
+	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
 		if (!cb->le_param_req) {
 			continue;
 		}
@@ -1370,21 +1488,21 @@ static struct bt_conn *conn_lookup_iso(struct bt_conn *conn)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(iso_conns); i++) {
-		struct bt_conn *iso_conn = bt_conn_ref(&iso_conns[i]);
+		struct bt_conn *iso = bt_conn_ref(&iso_conns[i]);
 
-		if (!iso_conn) {
+		if (iso == NULL) {
 			continue;
 		}
 
-		if (iso_conn == conn) {
-			return iso_conn;
+		if (iso == conn) {
+			return iso;
 		}
 
-		if (bt_conn_iso(iso_conn)->acl == conn) {
-			return iso_conn;
+		if (iso->iso.acl == conn) {
+			return iso;
 		}
 
-		bt_conn_unref(iso_conn);
+		bt_conn_unref(iso);
 	}
 #endif /* CONFIG_BT_ISO */
 	return NULL;
@@ -1738,6 +1856,12 @@ void bt_conn_identity_resolved(struct bt_conn *conn)
 			cb->identity_resolved(conn, rpa, &conn->le.dst);
 		}
 	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
+		if (cb->identity_resolved) {
+			cb->identity_resolved(conn, rpa, &conn->le.dst);
+		}
+	}
 }
 
 int bt_conn_le_start_encryption(struct bt_conn *conn, uint8_t rand[8],
@@ -1837,6 +1961,13 @@ void bt_conn_security_changed(struct bt_conn *conn, uint8_t hci_err,
 			cb->security_changed(conn, conn->sec_level, err);
 		}
 	}
+
+	STRUCT_SECTION_FOREACH(bt_conn_cb, cb) {
+		if (cb->security_changed) {
+			cb->security_changed(conn, conn->sec_level, err);
+		}
+	}
+
 #if IS_ENABLED(CONFIG_BT_KEYS_OVERWRITE_OLDEST)
 	if (!err && conn->sec_level >= BT_SECURITY_L2) {
 		if (conn->type == BT_CONN_TYPE_LE) {
@@ -2604,63 +2735,6 @@ struct net_buf *bt_conn_create_frag_timeout(size_t reserve, k_timeout_t timeout)
 #else
 	return bt_conn_create_pdu_timeout(pool, reserve, timeout);
 #endif /* CONFIG_NET_BUF_LOG */
-}
-
-#if defined(CONFIG_NET_BUF_LOG)
-struct net_buf *bt_conn_create_pdu_timeout_debug(struct net_buf_pool *pool,
-						 size_t reserve,
-						 k_timeout_t timeout,
-						 const char *func, int line)
-#else
-struct net_buf *bt_conn_create_pdu_timeout(struct net_buf_pool *pool,
-					   size_t reserve, k_timeout_t timeout)
-#endif
-{
-	struct net_buf *buf;
-
-	/*
-	 * PDU must not be allocated from ISR as we block with 'K_FOREVER'
-	 * during the allocation
-	 */
-	__ASSERT_NO_MSG(!k_is_in_isr());
-
-	if (!pool) {
-		pool = &acl_tx_pool;
-	}
-
-	if (IS_ENABLED(CONFIG_BT_DEBUG_CONN)) {
-#if defined(CONFIG_NET_BUF_LOG)
-		buf = net_buf_alloc_fixed_debug(pool, K_NO_WAIT, func, line);
-#else
-		buf = net_buf_alloc(pool, K_NO_WAIT);
-#endif
-		if (!buf) {
-			BT_WARN("Unable to allocate buffer with K_NO_WAIT");
-#if defined(CONFIG_NET_BUF_LOG)
-			buf = net_buf_alloc_fixed_debug(pool, timeout, func,
-							line);
-#else
-			buf = net_buf_alloc(pool, timeout);
-#endif
-		}
-	} else {
-#if defined(CONFIG_NET_BUF_LOG)
-		buf = net_buf_alloc_fixed_debug(pool, timeout, func,
-							line);
-#else
-		buf = net_buf_alloc(pool, timeout);
-#endif
-	}
-
-	if (!buf) {
-		BT_WARN("Unable to allocate buffer within timeout");
-		return NULL;
-	}
-
-	reserve += sizeof(struct bt_hci_acl_hdr) + BT_BUF_RESERVE;
-	net_buf_reserve(buf, reserve);
-
-	return buf;
 }
 
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_BREDR)
