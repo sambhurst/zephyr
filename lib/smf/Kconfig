@@ -1,0 +1,33 @@
+# Copyright 2021 The Chromium OS Authors
+# SPDX-License-Identifier: Apache-2.0
+
+config SMF
+	bool "Enable Hierarchical State Machine"
+	help
+	  This option enables the Hierarchical State Machine library
+
+if SMF
+
+config NUM_SMF_ANCESTORS
+	int "Number of ancestor states"
+	default 0
+	range 0 5
+	help
+	   This is the maximum number of ancestors in the hierarchical state
+	   machine framework.
+
+	   For example:
+	      A) Set to 0 for a flat state machine, where a state has no
+	         ancestors.
+	      B) Set to 1 for a hierarchical state machine, where a state
+	         can have at most 1 ancestor state.
+	      C) Set to 2 for a hierarchical state machine, where a state
+	         can have at most 2 ancestor states.
+	      And so on.
+
+config SMF_ANCESTOR_SUPPORT
+	def_bool NUM_SMF_ANCESTORS > 0
+	help
+	   If y, then the state machine framework includes ancestor state support
+
+endif # SMF
