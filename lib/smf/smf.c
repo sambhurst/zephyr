@@ -15,14 +15,11 @@ LOG_MODULE_REGISTER(smf);
  * member of the smf_ctx structure.
  */
 struct internal_ctx {
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
 	bool new_state : 1;
-#endif
 	bool terminate : 1;
 	bool exit      : 1;
 };
 
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
 /**
  * @brief Execute all ancestor entry actions
  *
@@ -30,8 +27,8 @@ struct internal_ctx {
  * @param target The entry actions of this target's ancestors are executed
  * @return true if the state machine should terminate, else false
  */
-static bool smf_execute_ancestor_entry_actions(struct smf_ctx *const ctx,
-					const struct smf_state *target)
+__unused static bool smf_execute_ancestor_entry_actions(
+		struct smf_ctx *const ctx, const struct smf_state *target)
 {
 	struct internal_ctx * const internal = (void *) &ctx->internal;
 	const struct smf_state *tmp_state[CONFIG_NUM_SMF_ANCESTORS];
@@ -101,7 +98,7 @@ static bool smf_execute_ancestor_entry_actions(struct smf_ctx *const ctx,
  * @param target The run actions of this target's ancestors are executed
  * @return true if the state machine should terminate, else false
  */
-static bool smf_execute_ancestor_run_actions(struct smf_ctx *ctx)
+__unused static bool smf_execute_ancestor_run_actions(struct smf_ctx *ctx)
 {
 	struct internal_ctx * const internal = (void *) &ctx->internal;
 	const struct smf_state *tmp_state;
@@ -156,8 +153,8 @@ static bool smf_execute_ancestor_run_actions(struct smf_ctx *ctx)
  * @param target The exit actions of this target's ancestors are executed
  * @return true if the state machine should terminate, else false
  */
-static bool smf_execute_ancestor_exit_actions(struct smf_ctx *const ctx,
-					const struct smf_state *target)
+__unused static bool smf_execute_ancestor_exit_actions(
+		struct smf_ctx *const ctx, const struct smf_state *target)
 {
 	struct internal_ctx * const internal = (void *) &ctx->internal;
 	const struct smf_state *tmp_state;
@@ -203,7 +200,6 @@ static bool smf_execute_ancestor_exit_actions(struct smf_ctx *const ctx,
 	}
 	return false;
 }
-#endif
 
 void smf_set_initial(struct smf_ctx *ctx, const struct smf_state *init_state)
 {
@@ -215,13 +211,13 @@ void smf_set_initial(struct smf_ctx *ctx, const struct smf_state *init_state)
 	ctx->previous = NULL;
 	ctx->terminate_val = 0;
 
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
-	internal->new_state = false;
+	if (IS_ENABLED(CONFIG_SMF_ANCESTOR_SUPPORT)) {
+		internal->new_state = false;
 
-	if (smf_execute_ancestor_entry_actions(ctx, init_state)) {
-		return;
+		if (smf_execute_ancestor_entry_actions(ctx, init_state)) {
+			return;
+		}
 	}
-#endif
 
 	/* Now execute the initial state's entry action */
 	if (init_state->entry) {
@@ -259,12 +255,13 @@ void smf_set_state(struct smf_ctx *const ctx, const struct smf_state *target)
 		}
 	}
 
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
-	internal->new_state = true;
-	if (smf_execute_ancestor_exit_actions(ctx, target)) {
-		return;
+	if (IS_ENABLED(CONFIG_SMF_ANCESTOR_SUPPORT)) {
+		internal->new_state = true;
+
+		if (smf_execute_ancestor_exit_actions(ctx, target)) {
+			return;
+		}
 	}
-#endif
 
 	internal->exit = false;
 
@@ -272,11 +269,11 @@ void smf_set_state(struct smf_ctx *const ctx, const struct smf_state *target)
 	ctx->previous = ctx->current;
 	ctx->current = target;
 
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
-	if (smf_execute_ancestor_entry_actions(ctx, target)) {
-		return;
+	if (IS_ENABLED(CONFIG_SMF_ANCESTOR_SUPPORT)) {
+		if (smf_execute_ancestor_entry_actions(ctx, target)) {
+			return;
+		}
 	}
-#endif
 
 	/* Now execute the target entry action */
 	if (ctx->current->entry) {
@@ -310,10 +307,11 @@ int32_t smf_run_state(struct smf_ctx *const ctx)
 		ctx->current->run(ctx);
 	}
 
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
-	if (smf_execute_ancestor_run_actions(ctx)) {
-		return ctx->terminate_val;
+	if (IS_ENABLED(CONFIG_SMF_ANCESTOR_SUPPORT)) {
+		if (smf_execute_ancestor_run_actions(ctx)) {
+			return ctx->terminate_val;
+		}
 	}
-#endif
+
 	return 0;
 }

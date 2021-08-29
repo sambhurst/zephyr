@@ -76,7 +76,6 @@ struct smf_state {
 	const state_execution run;
 	/** Optional method that will be run when this state exists */
 	const state_execution exit;
-#ifdef CONFIG_SMF_ANCESTOR_SUPPORT
 	/**
 	 * Optional parent state that contains common entry/run/exit
 	 *	implementation among various child states.
@@ -88,7 +87,6 @@ struct smf_state {
 	 *	that parent's exit and entry functions do not execute.
 	 */
 	const struct smf_state *parent;
-#endif
 };
 
 /** Defines the current context of the state machine. */
