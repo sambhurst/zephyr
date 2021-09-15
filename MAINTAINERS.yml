@@ -940,8 +940,11 @@ JSON Web Token:
     status: orphaned
     collaborators:
         - mrfuchs
+        - sir-branch
     files:
         - subsys/jwt/
+        - include/data/
+        - lib/os/json.c
     labels:
         - "area: JSON"
 
@@ -1477,9 +1480,9 @@ ITE Platforms:
         - sjg20
     files:
         - boards/riscv/it8xxx2_evb/
-        - drivers/*/*_ite*
+        - drivers/*/*it8xxx2*
         - dts/bindings/*/*ite*
-        - dts/riscv/it8xxx2.dtsi
+        - dts/riscv/*it8xxx2*
         - soc/riscv/riscv-ite/
     labels:
         - "platform: ITE"
@@ -1524,8 +1527,6 @@ USB:
     status: maintained
     maintainers:
         - jfischer-no
-    collaborators:
-        - mengxianglinx
     files:
         - drivers/usb/
         - dts/bindings/usb/

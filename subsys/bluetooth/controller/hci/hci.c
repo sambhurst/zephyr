@@ -3496,7 +3496,7 @@ static void le_cis_established(struct pdu_data *pdu_data,
 	cis = node_rx->hdr.rx_ftr.param;
 	cig = cis->group;
 	lll_cis = &cis->lll;
-	is_central = cig->lll.role == BT_CONN_ROLE_MASTER;
+	is_central = cig->lll.role == BT_CONN_ROLE_CENTRAL;
 	lll_cis_c = is_central ? &lll_cis->tx : &lll_cis->rx;
 	lll_cis_p = is_central ? &lll_cis->rx : &lll_cis->tx;
 	est = (void *)pdu_data;
@@ -5542,6 +5542,21 @@ static void le_per_adv_sync_report(struct pdu_data *pdu_data,
 
 	if (!(event_mask & BT_EVT_MASK_LE_META_EVENT) ||
 	    !(le_event_mask & BT_EVT_MASK_LE_PER_ADVERTISING_REPORT)) {
+		return;
+	}
+
+	if (node_rx->hdr.rx_ftr.aux_failed) {
+		sep = meta_evt(buf,
+			       BT_HCI_EVT_LE_PER_ADVERTISING_REPORT,
+			       sizeof(*sep));
+
+		sep->handle = sys_cpu_to_le16(node_rx->hdr.handle);
+		sep->tx_power = BT_HCI_LE_ADV_TX_POWER_NO_PREF;
+		sep->rssi = BT_HCI_LE_RSSI_NOT_AVAILABLE;
+		sep->cte_type = BT_HCI_LE_NO_CTE;
+		sep->data_status = BT_HCI_LE_ADV_EVT_TYPE_DATA_STATUS_INCOMPLETE;
+		sep->length = 0;
+
 		return;
 	}
 

@@ -265,6 +265,11 @@ uint8_t ll_adv_aux_sr_data_set(uint8_t handle, uint8_t op, uint8_t frag_pref, ui
 
 	/* If no length is provided, discard data */
 	if (!len) {
+		/* No scan response data, primary channel PDU's ADI update
+		 * should not copy into scan response ADI.
+		 */
+		sr_adi = NULL;
+
 		goto sr_data_set_did_update;
 	}
 
@@ -1042,6 +1047,11 @@ void ull_adv_aux_offset_get(struct ll_adv_set *adv)
 	static struct mayfly mfy = {0, 0, &link, NULL, mfy_aux_offset_get};
 	uint32_t ret;
 
+	/* NOTE: Single mayfly instance is sufficient as primary channel PDUs
+	 *       use time reservation, and this mayfly shall complete within
+	 *       the radio event. Multiple advertising sets do not need
+	 *       independent mayfly allocations.
+	 */
 	mfy.param = adv;
 	ret = mayfly_enqueue(TICKER_USER_ID_ULL_HIGH, TICKER_USER_ID_ULL_LOW, 1,
 			     &mfy);

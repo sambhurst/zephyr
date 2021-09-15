@@ -740,7 +740,7 @@ static void uart_sam0_irq_tx_enable(const struct device *dev)
 {
 	SercomUsart * const regs = DEV_CFG(dev)->regs;
 
-	regs->INTENSET.reg = SERCOM_USART_INTENCLR_DRE;
+	regs->INTENSET.reg = SERCOM_USART_INTENSET_DRE;
 }
 
 static void uart_sam0_irq_tx_disable(const struct device *dev)
@@ -754,7 +754,7 @@ static int uart_sam0_irq_tx_ready(const struct device *dev)
 {
 	SercomUsart * const regs = DEV_CFG(dev)->regs;
 
-	return regs->INTFLAG.bit.DRE != 0;
+	return (regs->INTFLAG.bit.DRE != 0) && (regs->INTENSET.bit.DRE != 0);
 }
 
 static void uart_sam0_irq_rx_enable(const struct device *dev)

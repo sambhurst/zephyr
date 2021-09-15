@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+set_property(TARGET linker PROPERTY devices_start_symbol "__device_start")
 
 find_program(CMAKE_LINKER ${CROSS_COMPILE}lldac PATH ${TOOLCHAIN_HOME} NO_DEFAULT_PATH)
 
@@ -118,12 +119,8 @@ macro(toolchain_ld_baremetal)
     -Hhostlib=
     -Hheap=0
     -Hnoivt
+    -Hnocrt
   )
-
-  # We only use CPP initialization code from crt
-  if(NOT CONFIG_CPLUSPLUS)
-    zephyr_ld_options(-Hnocrt)
-  endif()
 
   # There are two options:
   # - We have full MWDT libc support and we link MWDT libc - this is default

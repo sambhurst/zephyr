@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright(c) 2021 Intel Corporation. All rights reserved.
-
 import ctypes
 import mmap
 import os
@@ -29,6 +28,10 @@ HDA_SD_CTL__START        = 1 << 1
 def main():
     with open(FW_FILE, "rb") as f:
         fw_bytes = f.read()
+
+    (magic, sz) = struct.unpack("4sI", fw_bytes[0:8])
+    if magic == b'XMan':
+        fw_bytes = fw_bytes[sz:len(fw_bytes)]
 
     (hda, sd, dsp) = map_regs() # Device register mappings
 
@@ -59,7 +62,7 @@ def main():
     # sleep seems to be needed; if we're banging on the memory window
     # during initial boot (before/while the window control registers
     # are configured?) the DSP hardware will hang fairly reliably.
-    time.sleep(0.01)
+    time.sleep(0.1)
     while (dsp.SRAM_FW_STATUS >> 24) != 5: pass
 
     # Send the DSP an IPC message to tell the device how to boot
@@ -120,6 +123,16 @@ def map_regs():
         if p:
             pcidir = os.path.dirname(p)
             break
+
+    # Disengage runtime power management so the kernel doesn't put it to sleep
+    with open(pcidir + b"/power/control", "w") as ctrl:
+        ctrl.write("on")
+
+    # Make sure PCI memory space access and busmastering are enabled.
+    # Also disable interrupts so as not to confuse the kernel.
+    with open(pcidir + b"/config", "wb+") as cfg:
+        cfg.seek(4)
+        cfg.write(b'\x06\x04')
 
     hdamem = bar_map(pcidir, 0)
 

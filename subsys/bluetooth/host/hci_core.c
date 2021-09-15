@@ -496,7 +496,7 @@ int bt_le_create_conn_ext(const struct bt_conn *conn)
 	uint8_t num_phys;
 	int err;
 
-	if (IS_ENABLED(CONFIG_BT_WHITELIST)) {
+	if (IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST)) {
 		use_filter = atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT);
 	}
 
@@ -575,7 +575,7 @@ int bt_le_create_conn_legacy(const struct bt_conn *conn)
 	uint8_t own_addr_type;
 	int err;
 
-	if (IS_ENABLED(CONFIG_BT_WHITELIST)) {
+	if (IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST)) {
 		use_filter = atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT);
 	}
 
@@ -761,12 +761,12 @@ static void hci_disconn_complete(struct net_buf *buf)
 		return;
 	}
 
-#if defined(CONFIG_BT_CENTRAL) && !defined(CONFIG_BT_WHITELIST)
+#if defined(CONFIG_BT_CENTRAL) && !defined(CONFIG_BT_FILTER_ACCEPT_LIST)
 	if (atomic_test_bit(conn->flags, BT_CONN_AUTO_CONNECT)) {
 		bt_conn_set_state(conn, BT_CONN_CONNECT_SCAN);
 		bt_le_scan_update(false);
 	}
-#endif /* defined(CONFIG_BT_CENTRAL) && !defined(CONFIG_BT_WHITELIST) */
+#endif /* defined(CONFIG_BT_CENTRAL) && !defined(CONFIG_BT_FILTER_ACCEPT_LIST) */
 
 	bt_conn_unref(conn);
 }
@@ -899,7 +899,7 @@ static struct bt_conn *find_pending_connect(uint8_t role, bt_addr_le_t *peer_add
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) && role == BT_HCI_ROLE_MASTER) {
 		conn = bt_conn_lookup_state_le(BT_ID_DEFAULT, peer_addr,
 					       BT_CONN_CONNECT);
-		if (IS_ENABLED(CONFIG_BT_WHITELIST) && !conn) {
+		if (IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST) && !conn) {
 			conn = bt_conn_lookup_state_le(BT_ID_DEFAULT,
 						       BT_ADDR_LE_NONE,
 						       BT_CONN_CONNECT_AUTO);
@@ -1005,7 +1005,7 @@ static void le_conn_complete_cancel(void)
 	conn->err = BT_HCI_ERR_UNKNOWN_CONN_ID;
 
 	/* Handle cancellation of outgoing connection attempt. */
-	if (!IS_ENABLED(CONFIG_BT_WHITELIST)) {
+	if (!IS_ENABLED(CONFIG_BT_FILTER_ACCEPT_LIST)) {
 		/* We notify before checking autoconnect flag
 		 * as application may choose to change it from
 		 * callback.
@@ -1160,6 +1160,7 @@ void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt)
 		 * object to keep host in sync with controller state.
 		 */
 		atomic_clear_bit(adv->flags, BT_ADV_ENABLED);
+		(void)bt_le_lim_adv_cancel_timeout(adv);
 	}
 
 	if (IS_ENABLED(CONFIG_BT_CENTRAL) &&
@@ -1788,7 +1789,7 @@ static void hci_encrypt_change(struct net_buf *buf)
 			 * master on the link
 			 */
 			if (atomic_test_bit(conn->flags, BT_CONN_BR_PAIRING) &&
-			    conn->role == BT_CONN_ROLE_MASTER) {
+			    conn->role == BT_CONN_ROLE_CENTRAL) {
 				bt_smp_br_send_pairing_req(conn);
 			}
 		}
@@ -2390,7 +2391,7 @@ static void process_events(struct k_poll_event *ev, int count)
 
 #if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_ISO)
-/* command FIFO + conn_change signal + MAX_CONN + MAX_ISO_CONN */
+/* command FIFO + conn_change signal + MAX_CONN + ISO_MAX_CHAN */
 #define EV_COUNT (2 + CONFIG_BT_MAX_CONN + CONFIG_BT_ISO_MAX_CHAN)
 #else
 /* command FIFO + conn_change signal + MAX_CONN */
@@ -2398,8 +2399,8 @@ static void process_events(struct k_poll_event *ev, int count)
 #endif /* CONFIG_BT_ISO */
 #else
 #if defined(CONFIG_BT_ISO)
-/* command FIFO + MAX_ISO_CONN */
-#define EV_COUNT (1 + CONFIG_BT_ISO_MAX_CHAN)
+/* command FIFO + conn_change signal + ISO_MAX_CHAN */
+#define EV_COUNT (2 + CONFIG_BT_ISO_MAX_CHAN)
 #else
 /* command FIFO */
 #define EV_COUNT 1
@@ -3652,8 +3653,8 @@ bool bt_addr_le_is_bonded(uint8_t id, const bt_addr_le_t *addr)
 	}
 }
 
-#if defined(CONFIG_BT_WHITELIST)
-int bt_le_whitelist_add(const bt_addr_le_t *addr)
+#if defined(CONFIG_BT_FILTER_ACCEPT_LIST)
+int bt_le_filter_accept_list_add(const bt_addr_le_t *addr)
 {
 	struct bt_hci_cp_le_add_dev_to_wl *cp;
 	struct net_buf *buf;
@@ -3681,7 +3682,7 @@ int bt_le_whitelist_add(const bt_addr_le_t *addr)
 	return 0;
 }
 
-int bt_le_whitelist_rem(const bt_addr_le_t *addr)
+int bt_le_filter_accept_list_remove(const bt_addr_le_t *addr)
 {
 	struct bt_hci_cp_le_rem_dev_from_wl *cp;
 	struct net_buf *buf;
@@ -3708,7 +3709,7 @@ int bt_le_whitelist_rem(const bt_addr_le_t *addr)
 	return 0;
 }
 
-int bt_le_whitelist_clear(void)
+int bt_le_filter_accept_list_clear(void)
 {
 	int err;
 
@@ -3724,7 +3725,7 @@ int bt_le_whitelist_clear(void)
 
 	return 0;
 }
-#endif /* defined(CONFIG_BT_WHITELIST) */
+#endif /* defined(CONFIG_BT_FILTER_ACCEPT_LIST) */
 
 int bt_le_set_chan_map(uint8_t chan_map[5])
 {

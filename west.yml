@@ -32,7 +32,7 @@ manifest:
       revision: 094aeb41bb93e9199d24d665ee43e9e05d6d7b1c
       path: modules/lib/civetweb
     - name: cmsis
-      revision: 2c143ffc1fcc044c7f45f2d8ba259228ad5ffa06
+      revision: b0612c97c1401feeb4160add6462c3627fe90fc7
       path: modules/hal/cmsis
       groups:
         - hal
@@ -62,7 +62,7 @@ manifest:
       groups:
         - hal
     - name: hal_espressif
-      revision: 22d8246a520d2cf1ca6ba2e690471913cc00482a
+      revision: 3400257534944d3a6a4194d1dbf8f0cd1670d64e
       path: modules/hal/espressif
       west-commands: west/west-commands.yml
       groups:
@@ -88,7 +88,7 @@ manifest:
       groups:
         - hal
     - name: hal_nxp
-      revision: c7bb88ec3240f1f44b1aafd2831b1472ca99b1d8
+      revision: 78efc4ba7c1057c1cf2bf06e3e27ed7cc33e1da7
       path: modules/hal/nxp
       groups:
         - hal
@@ -114,7 +114,7 @@ manifest:
       groups:
         - hal
     - name: hal_stm32
-      revision: ac47229a9809a6d2250c14ff593e1b29625620be
+      revision: 5c8275071ec1cf160bfe8c18bbd9330a7d714dc8
       path: modules/hal/stm32
       groups:
         - hal
@@ -183,7 +183,7 @@ manifest:
       revision: 6010f0523cbc75f551d9256cf782f173177acdef
       path: modules/lib/open-amp
     - name: openthread
-      revision: 6e88d170bb7567d5e9638168e597f602ff3b6046
+      revision: 5d706547ebcb0a85e11412bcd88e80e2af98c74d
       path: modules/lib/openthread
     - name: segger
       revision: 3a52ab222133193802d3c3b4d21730b9b1f1d2f6
@@ -191,7 +191,7 @@ manifest:
       groups:
         - debug
     - name: sof
-      revision: 23c7e4739c301cc0dbc625aaf3f8e86042891565
+      revision: 76feb11d1b8f425021b5691668af2250fee444ac
       path: modules/audio/sof
     - name: tflite-micro
       revision: 9156d050927012da87079064db59d07f03b8baf6

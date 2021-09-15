@@ -77,6 +77,8 @@ zephyr_include_directories(
   ${STDINCLUDE}
 )
 
+include(${ZEPHYR_BASE}/cmake/linker_script/${ARCH}/linker.cmake OPTIONAL)
+
 # Don't add non-existing include directories, it creates noise and
 # warnings in some tooling
 foreach(optional_include_dir
@@ -592,22 +594,11 @@ add_custom_command(
 
 add_custom_target(${SYSCALL_LIST_H_TARGET} DEPENDS ${syscall_list_h})
 
-# This only works for CMake version >=3.15, but as the property is ignored on
-# older CMake versions there is no reason to check for version.
 set_property(TARGET ${SYSCALL_LIST_H_TARGET}
              APPEND PROPERTY
              ADDITIONAL_CLEAN_FILES
              ${CMAKE_CURRENT_BINARY_DIR}/include/generated/syscalls
 )
-
-# Only works with make.
-if(${CMAKE_VERSION} VERSION_LESS 3.15)
-  set_property(DIRECTORY
-               APPEND PROPERTY
-               ADDITIONAL_MAKE_CLEAN_FILES
-               ${CMAKE_CURRENT_BINARY_DIR}/include/generated/syscalls
-  )
-endif()
 
 add_custom_target(${PARSE_SYSCALLS_TARGET}
   DEPENDS
@@ -721,9 +712,12 @@ foreach(zephyr_lib ${ZEPHYR_LIBS_PROPERTY})
     if(NOT source_list
        AND NOT ${lib_imported}
     )
-      message(WARNING
-        "No SOURCES given to Zephyr library: ${zephyr_lib}\nExcluding target from build."
-      )
+      get_property(allow_empty TARGET ${zephyr_lib} PROPERTY ALLOW_EMPTY)
+      if(NOT "${allow_empty}")
+        message(WARNING
+          "No SOURCES given to Zephyr library: ${zephyr_lib}\nExcluding target from build."
+        )
+      endif()
       target_sources(${zephyr_lib} PRIVATE ${ZEPHYR_BASE}/misc/empty_file.c)
       set_property(TARGET ${zephyr_lib} PROPERTY EXCLUDE_FROM_ALL TRUE)
       list(REMOVE_ITEM ZEPHYR_LIBS_PROPERTY ${zephyr_lib})
@@ -795,6 +789,7 @@ if(CONFIG_HAS_DTS)
     --output-source dev_handles.c
     --kernel $<TARGET_FILE:${ZEPHYR_PREBUILT_EXECUTABLE}>
     --zephyr-base ${ZEPHYR_BASE}
+    --start-symbol "$<TARGET_PROPERTY:linker,devices_start_symbol>"
     DEPENDS ${ZEPHYR_PREBUILT_EXECUTABLE}
     )
   set_property(GLOBAL APPEND PROPERTY GENERATED_KERNEL_SOURCE_FILES dev_handles.c)

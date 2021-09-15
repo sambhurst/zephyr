@@ -2094,6 +2094,13 @@ class CMake():
         p = subprocess.Popen(cmd, **kwargs)
         out, _ = p.communicate()
 
+        # It might happen that the environment adds ANSI escape codes like \x1b[0m,
+        # for instance if twister is executed from inside a makefile. In such a
+        # scenario it is then necessary to remove them, as otherwise the JSON decoding
+        # will fail.
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        out = ansi_escape.sub('', out.decode())
+
         if p.returncode == 0:
             msg = "Finished running  %s" % (args[0])
             logger.debug(msg)
@@ -2280,8 +2287,7 @@ class ProjectBuilder(FilterBuilder):
         elif instance.platform.simulation == "mdb-nsim":
             if find_executable("mdb"):
                 instance.handler = BinaryHandler(instance, "nsim")
-                instance.handler.pid_fn = os.path.join(instance.build_dir, "mdb.pid")
-                instance.handler.call_west_flash = True
+                instance.handler.call_make_run = True
         elif instance.platform.simulation == "armfvp":
             instance.handler = BinaryHandler(instance, "armfvp")
             instance.handler.call_make_run = True
@@ -3196,6 +3202,7 @@ class TestSuite(DisablePyTestCollectionMixin):
 
                 if not force_toolchain \
                         and toolchain and (toolchain not in plat.supported_toolchains) \
+                        and "host" not in plat.supported_toolchains \
                         and tc.type != 'unit':
                     discards[instance] = discards.get(instance, "Not supported by the toolchain")
 
