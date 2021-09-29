@@ -35,7 +35,7 @@ Deprecated in this release
 
 * :c:macro:`BT_CONN_ROLE_MASTER` and :c:macro:`BT_CONN_ROLE_SLAVE`
   have been deprecated in favor of
-  :c:macro:`BT_CONN_ROLE_CENTRAL` and :c:macro:`BT_CONN_ROLE_PERIPHAL`
+  :c:macro:`BT_CONN_ROLE_CENTRAL` and :c:macro:`BT_CONN_ROLE_PERIPHERAL`
 
 * :c:macro:`BT_LE_SCAN_OPT_FILTER_WHITELIST`
   has been deprecated in favor of
@@ -49,6 +49,42 @@ Deprecated in this release
   :c:func:`bt_le_filter_accept_list_add`
   :c:func:`bt_le_filter_accept_list_remove`
   :c:func:`bt_le_filter_accept_list_clear`
+
+Modified in this release
+
+* The following Bluetooth macros and structures in :file:`hci.h` have been
+  modified to align with the inclusive naming in the v5.3 specification:
+
+  * ``BT_LE_FEAT_BIT_SLAVE_FEAT_REQ`` is now ``BT_LE_FEAT_BIT_PER_INIT_FEAT_XCHG``
+  * ``BT_LE_FEAT_BIT_CIS_MASTER`` is now ``BT_LE_FEAT_BIT_CIS_CENTRAL``
+  * ``BT_LE_FEAT_BIT_CIS_SLAVE`` is now ``BT_LE_FEAT_BIT_CIS_PERIPHERAL``
+  * ``BT_FEAT_LE_SLAVE_FEATURE_XCHG`` is now ``BT_FEAT_LE_PER_INIT_FEAT_XCHG``
+  * ``BT_FEAT_LE_CIS_MASTER`` is now ``BT_FEAT_LE_CIS_CENTRAL``
+  * ``BT_FEAT_LE_CIS_SLAVE`` is now ``BT_FEAT_LE_CIS_PERIPHERAL``
+  * ``BT_LE_STATES_SLAVE_CONN_ADV`` is now ``BT_LE_STATES_PER_CONN_ADV``
+  * ``BT_HCI_OP_LE_READ_WL_SIZE`` is now ``BT_HCI_OP_LE_READ_FAL_SIZE``
+  * ``bt_hci_rp_le_read_wl_size`` is now ``bt_hci_rp_le_read_fal_size``
+  * ``bt_hci_rp_le_read_wl_size::wl_size`` is now ``bt_hci_rp_le_read_fal_size::fal_size``
+  * ``BT_HCI_OP_LE_CLEAR_WL`` is now ``BT_HCI_OP_LE_CLEAR_FAL``
+  * ``BT_HCI_OP_LE_ADD_DEV_TO_WL`` is now ``BT_HCI_OP_LE_REM_DEV_FROM_FAL``
+  * ``bt_hci_cp_le_add_dev_to_wl`` is now ``bt_hci_cp_le_add_dev_to_fal``
+  * ``BT_HCI_OP_LE_REM_DEV_FROM_WL`` is now ``BT_HCI_OP_LE_REM_DEV_FROM_FAL``
+  * ``bt_hci_cp_le_rem_dev_from_wl`` is now ``bt_hci_cp_le_rem_dev_from_fal``
+  * ``BT_HCI_ROLE_MASTER`` is now ``BT_HCI_ROLE_CENTRAL``
+  * ``BT_HCI_ROLE_SLAVE`` is now ``BT_HCI_ROLE_PERIPHERAL``
+  * ``BT_EVT_MASK_CL_SLAVE_BC_RX`` is now ``BT_EVT_MASK_CL_PER_BC_RX``
+  * ``BT_EVT_MASK_CL_SLAVE_BC_TIMEOUT`` is now ``BT_EVT_MASK_CL_PER_BC_TIMEOUT``
+  * ``BT_EVT_MASK_SLAVE_PAGE_RSP_TIMEOUT`` is now ``BT_EVT_MASK_PER_PAGE_RSP_TIMEOUT``
+  * ``BT_EVT_MASK_CL_SLAVE_BC_CH_MAP_CHANGE`` is now ``BT_EVT_MASK_CL_PER_BC_CH_MAP_CHANGE``
+  * ``m_*`` structure members are now ``c_*``
+  * ``s_*`` structure members are now ``p_*``
+
+* The ``CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY`` Kconfig option is now
+  :kconfig:`CONFIG_BT_PERIPHERAL_PREF_LATENCY`
+* The ``CONFIG_BT_CTLR_SLAVE_FEAT_REQ_SUPPORT`` Kconfig option is now
+  :kconfig:`CONFIG_BT_CTLR_PER_INIT_FEAT_XCHG_SUPPORT`
+* The ``CONFIG_BT_CTLR_SLAVE_FEAT_REQ`` Kconfig option is now
+  :kconfig:`CONFIG_BT_CTLR_PER_INIT_FEAT_XCHG`
 
 Changes in this release
 ==========================
@@ -70,6 +106,8 @@ Removed APIs in this release
   in favor of direct use of chosen node ``zephyr,bt-uart``.
 * Removed ``CONFIG_BT_MONITOR_ON_DEV_NAME`` Kconfig option
   in favor of direct use of chosen node ``zephyr,bt-mon-uart``.
+* Removed ``CONFIG_MODEM_GSM_UART_NAME`` Kconfig option
+  in favor of direct use of chosen node ``zephyr,gsm-ppp``.
 * Removed ``CONFIG_UART_MCUMGR_ON_DEV_NAME`` Kconfig option
   in favor of direct use of chosen node ``zephyr,uart-mcumgr``.
 * Removed ``CONFIG_UART_CONSOLE_ON_DEV_NAME`` Kconfig option
@@ -87,6 +125,12 @@ Stable API changes in this release
   * Added :c:struct:`multiple` to the :c:struct:`bt_gatt_read_params` - this
     structure contains two members: ``handles``, which was moved from
     :c:struct:`bt_gatt_read_params`, and ``variable``.
+
+* Networking
+
+  * Added IPv4 address support to the multicast group join/leave monitor. The
+    address parameter passed to the callback function was therefore changed from
+    ``in6_addr`` to ``net_addr`` type.
 
 Kernel
 ******
@@ -108,6 +152,12 @@ Architectures
 
 
   * AARCH64
+
+
+* RISC-V
+
+  * Added support to RISC-V CPU devicetree compatible bindings
+  * Added support to link with ITCM & DTCM sections
 
 
 * x86
@@ -139,6 +189,16 @@ Boards & SoC Support
 
 * Made these changes in other SoC series:
 
+  * Added Atmel SAM0 pinctrl support
+  * Added Atmel SAM4L USBC device controller
+  * Added Atmel GMAC support for MDIO driver
+  * Added Atmel GMAC support to use generic PHY driver
+  * Added Atmel SAM counter (TC) Driver
+  * Added Atmel SAM DAC (DACC) driver
+  * Enabled Atmel SAM ``clock-frequency`` support from devicetree
+  * Free Atmel SAM TRACESWO pin when unused
+  * Enabled Cypress PSoC-6 Cortex-M4 support
+
 
 * Changes for ARC boards:
 
@@ -156,6 +216,21 @@ Boards & SoC Support
 
 
 * Made these changes in other boards:
+
+  * arduino_due: Added support for TC driver
+  * atsame54_xpro: Added support for PHY driver
+  * sam4l_ek: Added support for TC driver
+  * sam4e_xpro: Added support for PHY driver
+  * sam4e_xpro: Added support for TC driver
+  * sam4s_xplained: Added support for TC driver
+  * sam_e70_xplained: Added support for DACC driver
+  * sam_e70_xplained: Added support for PHY driver
+  * sam_e70_xplained: Added support for TC driver
+  * sam_v71_xult: Added support for DACC driver
+  * sam_v71_xult: Added support for PHY driver
+  * sam_v71_xult: Added support for TC driver
+  * sam_v71_xult: Enable pwm on LED0
+  * cy8ckit_062_ble: Added arduino's nexus map
 
 
 * Added support for these following shields:
@@ -181,10 +256,14 @@ Drivers and Sensors
 
 * Counter
 
+  * Add Atmel SAM counter (TC) Driver
+
 
 * DAC
 
-   * Added support for Microchip MCP4725
+  * Added Atmel SAM DAC (DACC) driver
+  * Added support for Microchip MCP4725
+
 
 * Disk
 
@@ -199,7 +278,9 @@ Drivers and Sensors
 
 * DMA
 
+  * Added Atmel SAM XDMAC reload support
   * Added support on STM32G0 and STM32H7
+
 
 * EEPROM
 
@@ -210,6 +291,11 @@ Drivers and Sensors
   * Added support for Microchip eSPI SAF
 
 * Ethernet
+
+  * Added Atmel SAM/SAM0 GMAC devicetree support
+  * Added Atmel SAM/SAM0 MDIO driver
+  * Added MDIO driver
+  * Added generic PHY driver
 
 
 * Flash
@@ -225,6 +311,8 @@ Drivers and Sensors
 
 
 * I2S
+
+  * Added Atmel SAM I2S driver support to XDMAC reload
 
 
 * IEEE 802.15.4
@@ -242,6 +330,13 @@ Drivers and Sensors
     can be used for the previous, non-blocking behaviour.
 
 * Modem
+
+  * Added gsm_ppp devicetree support
+
+
+* Pinmux
+
+  * Added Atmel SAM0 pinctrl support
 
 
 * PWM
@@ -261,6 +356,8 @@ Drivers and Sensors
 
 * USB
 
+  * Add Atmel SAM4L USBC device controller
+
 
 * Watchdog
 
@@ -271,38 +368,131 @@ Drivers and Sensors
 Networking
 **********
 
+* 802.15.4 L2:
+
+  * Fixed a bug, where the net_pkt structure contained invalid LL address
+    pointers after being processed by 802.15.4 L2.
+  * Added an optional destination address filtering in the 802.15.4 L2.
+
 * CoAP:
 
+  * Added ``user_data`` field to the :c:struct:`coap_packet` structure.
+  * Fixed processing of out-of-order notifications.
+  * Fixed :c:func:`coap_packet_get_payload` function.
+  * Converted CoAP test suite to ztest API.
+  * Improved :c:func:`coap_packet_get_payload` function to minimize number
+    of RNG calls.
+  * Fixed retransmissions in the ``coap_server`` sample.
+  * Fixed observer removal in the ``coap_server`` sample (on notification
+    timeout).
 
 * DHCPv4:
 
+  * Fixed a bug, where DHPCv4 library removed statically configured gateway
+    before obtaining a new one from the server.
 
 * DNS:
 
+  * Fixed a bug, where the same IP address was used to populate the result
+    address info entries, when multiple IP addresses were obtained from the
+    server.
 
 * HTTP:
 
+  * Switched the library to use ``zsock_*`` API, to improve compatibility with
+    various POSIX configurations.
+  * Fixed a bug, where ``HTTP_DATA_FINAL`` notification was triggered even for
+    intermediate response fragments.
 
-* IPv4:
+* IPv6:
 
+  * Multiple IPv6 fixes, addressing failures in IPv6Ready compliance tests.
 
 * LwM2M:
 
+  * Added support for notification timeout reporting to the application.
+  * Fixed a bug, where a multi instance resource with only one active instance
+    was incorrectly encoded on reads.
+  * Fixed a bug, where notifications were generated on changes to non-readable
+    resources.
+  * Added mutex protection  for the state variable of the ``lwm2m_rd_client``
+    module.
+  * Removed LWM2M_RES_TYPE_U64 type, as it's not possible to encode it properly
+    for large values.
+  * Fixed a bug, where large unsigned integers were incorrectly encoded in TLV.
+  * Multiple fixes for FLOAT type processing in the LwM2M engine and encoders.
+  * Fix a bug, where IPSO Push Button counter resource was not triggering
+    notification on incrementation.
+  * Fixed a bug, where Register failures were reported as success to the
+    application.
 
 * Misc:
 
+  * Added RX/TX timeout on a socket in ``big_http_download`` sample.
+  * Introduced :c:func:`net_pkt_remove_tail` function.
+    Added IEEE 802.15.4 security-related flags to the :c:struct:`net_pkt`
+    structure.
+  * Added bridging support to the Ethernet L2.
+  * Fixed a bug in mDNS, where an incorrect address type could be set as a
+    response destination.
+  * Added an option to suppress ICMP destination unreachable errors.
+  * Fixed possible assertion in ``net nbr`` shell command.
+  * Major refactoring of the TFTP library.
+
+* MQTT:
+
+  * Added an option to register a custom transport type.
+  * Fixed a bug in :c:func:`mqtt_abort`, where the function could return without
+    releasing a lock.
 
 * OpenThread:
 
+  * Update OpenThread module up to commit ``9ea34d1e2053b6b2a80e1d46b65a6aee99fc504a``.
+    Added several new Kconfig options to align with new OpenThread
+    configurations.
+  * Added OpenThread API mutex protection during initialization.
+  * Converted OpenThread thread to a dedicated work queue.
+  * Implemented missing :c:func:`otPlatAssertFail` platform function.
+  * Fixed a bug, where NONE level OpenThread logs were not processed.
+  * Added possibility to disable CSL sampling, when used.
+  * Fixed a potential bug, where invalid error code could be returned by the
+    platform radio layer to OpenThread.
+  * Reworked UART configuration in the OpenThread Coprocessor sample.
 
 * Socket:
 
+  * Added microsecond accuracy in :c:func:`zsock_select` function.
+  * Reworked :c:func:`zsock_select` into a syscall.
+  * Fixed a bug, where :c:func:`poll` events were not signalled correctly
+    for socketpair sockets.
+  * Fixed a bug, where socket mutex could be used after being initialized by a
+    new owner after being deallocated in :c:func:`zsock_close`.
+  * Fixed a possible assert after enabling CAN sockets.
+  * Fixed IPPROTO_RAW usage in packet socket implementation.
 
 * TCP:
 
+  * Fixed a bug, where ``unacked_len`` could be set to a negative value.
+  * Fixed possible assertion failure in :c:func:`tcp_send_data`.
+  * Fixed a bug, where [FIN, PSH, ACK] was not handled properly in
+    TCP_FIN_WAIT_2 state.
 
 * TLS:
 
+  * Reworked TLS sockets to use secure random generator from Zephyr.
+  * Fixed busy looping during DTLS handshake with offloaded sockets.
+  * Fixed busy looping during TLS/DTLS handshake on non blocking sockets.
+  * Reset mbed TLS session on timed out DTLS handshake, to allow a retry without
+    closing a socket.
+  * Fixed TLS/DTLS :c:func:`sendmsg` implementation for larger payloads.
+  * Fixed TLS/DTLS sockets ``POLLHUP`` notification.
+
+* WebSocket:
+
+  * Fixed :c:func:`poll` implementation for WebSocket, which did not work
+    correctly with offloaded sockets.
+  * Fixed :c:func:`ioctl` implementation for WebSocket, which did not work
+    correctly with offloaded sockets.
 
 USB
 ***
@@ -341,6 +531,12 @@ Build and Infrastructure
 
 * West (extensions)
 
+    * openocd runner: Zephyr thread awareness is now available in GDB by default
+      for application builds with :kconfig:`CONFIG_DEBUG_THREAD_INFO` set to ``y``
+      in :ref:`kconfig`. This applies to ``west debug``, ``west debugserver``,
+      and ``west attach``. OpenOCD version later than 0.11.0 must be installed
+      on the host system.
+
 
 Libraries / Subsystems
 **********************
@@ -365,6 +561,17 @@ Libraries / Subsystems
     * ``device_busy_clear`` -> ``pm_device_busy_clear``
     * ``device_busy_check`` -> ``pm_device_is_busy``
     * ``device_any_busy_check`` -> ``pm_device_is_any_busy``
+
+  * The device power management callback (``pm_device_control_callback_t``) has
+    been largely simplified to work based on *actions*, resulting in simpler and
+    more natural implementations. This principle is also used by other OSes like
+    the Linux Kernel. As a result, the callback argument list has been reduced
+    to the device instance and an action (e.g. ``PM_DEVICE_ACTION_RESUME``).
+    Other improvements include specification of error codes, removal of some
+    unused/unclear states, or guarantees such as avoid calling a device for
+    suspend/resume if it is already at the right state. All these changes
+    together have allowed simplifying multiple device power management callback
+    implementations.
 
 * Logging
 

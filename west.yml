@@ -62,7 +62,7 @@ manifest:
       groups:
         - hal
     - name: hal_espressif
-      revision: 3400257534944d3a6a4194d1dbf8f0cd1670d64e
+      revision: 6cb37487b6ee42f96b4ba0d4719bb5759b098822
       path: modules/hal/espressif
       west-commands: west/west-commands.yml
       groups:
@@ -158,7 +158,7 @@ manifest:
       groups:
         - crypto
     - name: mcuboot
-      revision: ca01db4216c63678768ea78fe04f27cd80b83246
+      revision: 70bfbd21cdf5f6d1402bc8d0031e197222ed2ec0
       path: bootloader/mcuboot
     - name: mcumgr
       revision: 31a2aa9cea58d3ceecbf0d5b91361bff7c94aeca
@@ -206,7 +206,7 @@ manifest:
       groups:
         - crypto
     - name: TraceRecorderSource
-      revision: 5b5f8d7adbf0e93a09087e8f5708f0eebb8b25bf
+      revision: 36c577727642457b0db7274298a4b96558374832
       path: modules/debug/TraceRecorder
       groups:
         - debug

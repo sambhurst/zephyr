@@ -37,6 +37,7 @@
 #include "access.h"
 #include "foundation.h"
 #include "proxy.h"
+#include "pb_gatt_srv.h"
 #include "prov.h"
 #include "settings.h"
 
@@ -150,8 +151,11 @@ static void prov_start(const uint8_t *data)
 	memcpy(bt_mesh_prov_link.conf_inputs.start, data, PDU_LEN_START);
 
 	bt_mesh_prov_link.expect = PROV_PUB_KEY;
+	bt_mesh_prov_link.oob_method = data[2];
+	bt_mesh_prov_link.oob_action = data[3];
+	bt_mesh_prov_link.oob_size = data[4];
 
-	if (bt_mesh_prov_auth(data[2], data[3], data[4]) < 0) {
+	if (bt_mesh_prov_auth(false, data[2], data[3], data[4]) < 0) {
 		BT_ERR("Invalid authentication method: 0x%02x; "
 		       "action: 0x%02x; size: 0x%02x", data[2], data[3],
 		       data[4]);
@@ -634,6 +638,10 @@ int bt_mesh_prov_disable(bt_mesh_prov_bearer_t bearers)
 		return -EALREADY;
 	}
 
+	if (bt_mesh_prov_active()) {
+		return -EBUSY;
+	}
+
 	if (IS_ENABLED(CONFIG_BT_MESH_PB_ADV) &&
 	    (bearers & BT_MESH_PROV_ADV)) {
 		bt_mesh_beacon_disable();
@@ -642,7 +650,7 @@ int bt_mesh_prov_disable(bt_mesh_prov_bearer_t bearers)
 
 	if (IS_ENABLED(CONFIG_BT_MESH_PB_GATT) &&
 	    (bearers & BT_MESH_PROV_GATT)) {
-		bt_mesh_proxy_prov_disable(true);
+		(void)bt_mesh_pb_gatt_disable();
 	}
 
 	return 0;

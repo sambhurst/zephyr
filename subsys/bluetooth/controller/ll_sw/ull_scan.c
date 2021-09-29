@@ -50,8 +50,9 @@
 #include "hal/debug.h"
 
 static int init_reset(void);
-static void ticker_cb(uint32_t ticks_at_expire, uint32_t remainder, uint16_t lazy,
-		      uint8_t force, void *param);
+static void ticker_cb(uint32_t ticks_at_expire, uint32_t ticks_drift,
+		      uint32_t remainder, uint16_t lazy, uint8_t force,
+		      void *param);
 static uint8_t disable(uint8_t handle);
 
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
@@ -415,7 +416,7 @@ uint8_t ull_scan_enable(struct ll_scan_set *scan)
 					      &ticks_ref, &offset_us);
 
 		/* Use the ticks_ref as scanner's anchor if a free time space
-		 * after any master role is available (indicated by a non-zero
+		 * after any central role is available (indicated by a non-zero
 		 * offset_us value).
 		 */
 		if (offset_us) {
@@ -619,18 +620,23 @@ uint32_t ull_scan_is_enabled(uint8_t handle)
 
 	scan = ull_scan_is_enabled_get(handle);
 	if (!scan) {
-		return 0;
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+		scan = ull_scan_set_get(handle);
+
+		return scan->per_scan.sync ? ULL_SCAN_IS_SYNC : 0U;
+#else
+		return 0U;
+#endif
 	}
 
-	/* NOTE: BIT(0) - passive scanning enabled
-	 *       BIT(1) - active scanning enabled
-	 *       BIT(2) - initiator enabled
-	 */
 	return (((uint32_t)scan->is_enabled << scan->lll.type) |
 #if defined(CONFIG_BT_CENTRAL)
-		(scan->lll.conn ? BIT(2) : 0) |
+		(scan->lll.conn ? ULL_SCAN_IS_INITIATOR : 0U) |
 #endif
-		0);
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+		(scan->per_scan.sync ? ULL_SCAN_IS_SYNC : 0U) |
+#endif
+		0U);
 }
 
 uint32_t ull_scan_filter_pol_get(uint8_t handle)
@@ -655,8 +661,9 @@ static int init_reset(void)
 	return 0;
 }
 
-static void ticker_cb(uint32_t ticks_at_expire, uint32_t remainder,
-		      uint16_t lazy, uint8_t force, void *param)
+static void ticker_cb(uint32_t ticks_at_expire, uint32_t ticks_drift,
+		      uint32_t remainder, uint16_t lazy, uint8_t force,
+		      void *param)
 {
 	static memq_link_t link;
 	static struct mayfly mfy = {0, 0, &link, NULL, lll_scan_prepare};
