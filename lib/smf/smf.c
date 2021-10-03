@@ -20,6 +20,52 @@ struct internal_ctx {
 	bool exit      : 1;
 };
 
+static bool share_paren(const struct smf_state *test_state,
+			const struct smf_state *target_state)
+{
+	for (const struct smf_state *state = test_state;
+	     state != NULL;
+	     state = state->parent) {
+		if (target_state == state) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool last_state_share_paren(struct smf_ctx *const ctx,
+				   const struct smf_state *state)
+{
+	/* Get parent state of previous state */
+	if (!ctx->previous) {
+		return false;
+	}
+
+	return share_paren(ctx->previous->parent, state);
+}
+
+static const struct smf_state *get_child_of(const struct smf_state *states,
+					    const struct smf_state *parent)
+{
+	for (const struct smf_state *tmp = states; ;tmp = tmp->parent) {
+		if (tmp->parent == parent) {
+			return tmp;
+		}
+
+		if (tmp->parent == NULL) {
+			return NULL;
+		}
+	}
+
+	return NULL;
+}
+
+static const struct smf_state *get_last_of(const struct smf_state *states)
+{
+	return get_child_of(states, NULL);
+}
+
 /**
  * @brief Execute all ancestor entry actions
  *
@@ -31,56 +77,13 @@ __unused static bool smf_execute_ancestor_entry_actions(
 		struct smf_ctx *const ctx, const struct smf_state *target)
 {
 	struct internal_ctx * const internal = (void *) &ctx->internal;
-	const struct smf_state *tmp_state[CONFIG_NUM_SMF_ANCESTORS];
-	const struct smf_state *last_parent;
 
-	/*
-	 * Prepare to execute all entry actions of the target's
-	 * parent states
-	 */
-
-	tmp_state[CONFIG_NUM_SMF_ANCESTORS - 1] = target->parent;
-
-	/* Get all parent states of the target */
-	for (int i = CONFIG_NUM_SMF_ANCESTORS - 1; i > 0; i--) {
-		if (tmp_state[i] != NULL) {
-			tmp_state[i - 1] = tmp_state[i]->parent;
-		} else {
-			tmp_state[i - 1] = NULL;
-		}
-	}
-
-	/* Get parent state of previous state */
-	if (ctx->previous) {
-		last_parent = ctx->previous->parent;
-	} else {
-		last_parent = NULL;
-	}
-
-	/* Execute all parent state entry actions in forward order */
-	for (int i = 0; i < CONFIG_NUM_SMF_ANCESTORS; i++) {
-		/* No parent state */
-		if (tmp_state[i] == NULL) {
-			continue;
-		}
-
-		/*
-		 * We only want to execute the target state's parent state
-		 * entry action if it doesn't share a parent state with the
-		 * previous state.
-		 */
-		while (last_parent != NULL) {
-			if (tmp_state[i] == last_parent) {
-				return false;
-			}
-
-			/* Get last state's next parent state if it exists */
-			last_parent = last_parent->parent;
-		}
-
+	for (const struct smf_state *to_execute = get_last_of(target);
+	     to_execute != NULL && to_execute != target;
+	     to_execute = get_child_of(target, to_execute)) {
 		/* Execute parent state's entry */
-		if (tmp_state[i]->entry) {
-			tmp_state[i]->entry(ctx);
+		if (!last_state_share_paren(ctx, to_execute) && to_execute->entry) {
+			to_execute->entry(ctx);
 
 			/* No need to continue if terminate was set */
 			if (internal->terminate) {
@@ -88,6 +91,7 @@ __unused static bool smf_execute_ancestor_entry_actions(
 			}
 		}
 	}
+
 	return false;
 }
 
@@ -101,8 +105,6 @@ __unused static bool smf_execute_ancestor_entry_actions(
 __unused static bool smf_execute_ancestor_run_actions(struct smf_ctx *ctx)
 {
 	struct internal_ctx * const internal = (void *) &ctx->internal;
-	const struct smf_state *tmp_state;
-
 	/* Execute all run actions in reverse order */
 
 	/* Return if the current state switched states */
@@ -117,26 +119,20 @@ __unused static bool smf_execute_ancestor_run_actions(struct smf_ctx *ctx)
 	}
 
 	/* Try to run parent run actions */
-	tmp_state = ctx->current->parent;
-	for (int i = 0; i < CONFIG_NUM_SMF_ANCESTORS; i++) {
+	for (const struct smf_state *tmp_state = ctx->current->parent;
+	     tmp_state != NULL;
+	     tmp_state = tmp_state->parent) {
 		/* Execute parent run action */
-		if (tmp_state && tmp_state->run) {
+		if (tmp_state->run) {
 			tmp_state->run(ctx);
-		}
+			/* No need to continue if terminate was set */
+			if (internal->terminate) {
+				return true;
+			}
 
-		/* break if the parent state switched states */
-		if (internal->new_state) {
-			break;
-		}
-
-		/* No need to continue if terminate was set */
-		if (internal->terminate) {
-			return true;
-		}
-
-		/* Get next parent state */
-		if (tmp_state) {
-			tmp_state = tmp_state->parent;
+			if (internal->new_state) {
+				break;
+			}
 		}
 	}
 
@@ -166,30 +162,10 @@ __unused static bool smf_execute_ancestor_exit_actions(
 	target_parent = target->parent;
 	tmp_state = ctx->current;
 
-	for (int i = 0; i < CONFIG_NUM_SMF_ANCESTORS; i++) {
-		/* Get parent state */
-		if (tmp_state == NULL) {
-			break;
-		}
-
-		tmp_state = tmp_state->parent;
-
-		/*
-		 * Do not execute a parent state's exit action that has
-		 * a shared ancestry with the target.
-		 */
-		while (target_parent != NULL) {
-			if (tmp_state == target_parent) {
-				tmp_state = NULL;
-				break;
-			}
-
-			/* Get target state next parent state if it exists */
-			target_parent = target_parent->parent;
-		}
-
-		if (tmp_state && tmp_state->exit) {
-			/* Execute exit action */
+	for (const struct smf_state *tmp_state = ctx->current->parent;
+	     tmp_state != NULL;
+	     tmp_state = tmp_state->parent) {
+		if (!share_paren(target->parent, tmp_state) && tmp_state->exit) {
 			tmp_state->exit(ctx);
 
 			/* No need to continue if terminate was set */
@@ -224,7 +200,6 @@ void smf_set_initial(struct smf_ctx *ctx, const struct smf_state *init_state)
 		init_state->entry(ctx);
 	}
 }
-
 
 void smf_set_state(struct smf_ctx *const ctx, const struct smf_state *target)
 {
