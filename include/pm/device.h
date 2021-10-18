@@ -83,9 +83,23 @@ enum pm_device_action {
 };
 
 /**
+ * @brief Device PM action callback.
+ *
+ * @param dev Device instance.
+ * @param action Requested action.
+ *
+ * @retval 0 If successful.
+ * @retval -ENOTSUP If the requested action is not supported.
+ * @retval Errno Other negative errno on failure.
+ */
+typedef int (*pm_device_action_cb_t)(const struct device *dev,
+				     enum pm_device_action action);
+
+/**
  * @brief Device PM info
  */
 struct pm_device {
+#ifdef CONFIG_PM_DEVICE_RUNTIME
 	/** Pointer to the device */
 	const struct device *dev;
 	/** Lock to synchronize the get/put operations */
@@ -93,17 +107,29 @@ struct pm_device {
 	/* Following are packed fields protected by #lock. */
 	/** Device pm enable flag */
 	bool enable : 1;
-	/* Device PM status flags. */
-	atomic_t flags;
 	/** Device usage count */
 	uint32_t usage;
-	/** Device power state */
-	enum pm_device_state state;
 	/** Work object for asynchronous calls */
 	struct k_work_delayable work;
 	/** Event conditional var to listen to the sync request events */
 	struct k_condvar condvar;
+#endif /* CONFIG_PM_DEVICE_RUNTIME */
+	/* Device PM status flags. */
+	atomic_t flags;
+	/** Device power state */
+	enum pm_device_state state;
+	/** Device PM action callback */
+	pm_device_action_cb_t action_cb;
 };
+
+#ifdef CONFIG_PM_DEVICE_RUNTIME
+#define INIT_PM_DEVICE_RUNTIME(obj)			\
+	.usage = 0U,					\
+	.lock = Z_MUTEX_INITIALIZER(obj.lock),		\
+	.condvar = Z_CONDVAR_INITIALIZER(obj.condvar),
+#else
+#define INIT_PM_DEVICE_RUNTIME(obj)
+#endif /* CONFIG_PM_DEVICE_RUNTIME */
 
 /**
  * @brief Utility macro to initialize #pm_device.
@@ -113,31 +139,18 @@ struct pm_device {
  *
  * @param obj Name of the #pm_device structure being initialized.
  * @param node_id Devicetree node for the initialized device (can be invalid).
+ * @param pm_action_cb Device PM control callback function.
  */
-#define Z_PM_DEVICE_INIT(obj, node_id)					\
+#define Z_PM_DEVICE_INIT(obj, node_id, pm_action_cb)			\
 	{								\
-		.usage = 0U,						\
-		.lock = Z_MUTEX_INITIALIZER(obj.lock),			\
-		.condvar = Z_CONDVAR_INITIALIZER(obj.condvar),		\
+		INIT_PM_DEVICE_RUNTIME(obj)				\
+		.action_cb = pm_action_cb,				\
 		.state = PM_DEVICE_STATE_ACTIVE,			\
 		.flags = ATOMIC_INIT(COND_CODE_1(			\
 				DT_NODE_EXISTS(node_id),		\
 				(DT_PROP_OR(node_id, wakeup_source, 0)),\
 				(0)) << PM_DEVICE_FLAGS_WS_CAPABLE),	\
 	}
-
-/**
- * @brief Device power management control function callback.
- *
- * @param dev Device instance.
- * @param action Requested action.
- *
- * @retval 0 If successful.
- * @retval -ENOTSUP If the requested action is not supported.
- * @retval Errno Other negative errno on failure.
- */
-typedef int (*pm_device_control_callback_t)(const struct device *dev,
-					    enum pm_device_action action);
 
 /**
  * @brief Get name of device PM state

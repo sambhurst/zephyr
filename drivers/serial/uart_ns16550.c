@@ -871,6 +871,12 @@ static void uart_ns16550_isr(const struct device *dev)
 		dev_data->cb(dev, dev_data->cb_data);
 	}
 
+#ifdef CONFIG_UART_NS16550_WA_ISR_REENABLE_INTERRUPT
+	uint8_t cached_ier = INBYTE(IER(dev));
+
+	OUTBYTE(IER(dev), 0U);
+	OUTBYTE(IER(dev), cached_ier);
+#endif
 }
 
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
@@ -1102,7 +1108,7 @@ static const struct uart_driver_api uart_ns16550_driver_api = {
 	};                                                                           \
 	DEVICE_DT_INST_DEFINE(n, &uart_ns16550_init, NULL,                           \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
-			      PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,      \
+			      PRE_KERNEL_1, CONFIG_SERIAL_INIT_PRIORITY,             \
 			      &uart_ns16550_driver_api);                             \
 	UART_NS16550_IRQ_FUNC_DEFINE(n)
 

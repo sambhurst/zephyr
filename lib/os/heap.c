@@ -167,6 +167,17 @@ void sys_heap_free(struct sys_heap *heap, void *mem)
 	free_chunk(h, c);
 }
 
+size_t sys_heap_usable_size(struct sys_heap *heap, void *mem)
+{
+	struct z_heap *h = heap->heap;
+	chunkid_t c = mem_to_chunkid(h, mem);
+	size_t addr = (size_t)mem;
+	size_t chunk_base = (size_t)&chunk_buf(h)[c];
+	size_t chunk_sz = chunk_size(h, c) * CHUNK_UNIT;
+
+	return chunk_sz - (addr - chunk_base);
+}
+
 static chunkid_t alloc_chunk(struct z_heap *h, chunksz_t sz)
 {
 	int bi = bucket_idx(h, sz);
@@ -379,8 +390,13 @@ void *sys_heap_aligned_realloc(struct sys_heap *heap, void *ptr,
 
 void sys_heap_init(struct sys_heap *heap, void *mem, size_t bytes)
 {
-	/* Must fit in a 31 bit count of HUNK_UNIT */
-	__ASSERT(bytes / CHUNK_UNIT <= 0x7fffffffU, "heap size is too big");
+	if (IS_ENABLED(CONFIG_SYS_HEAP_SMALL_ONLY)) {
+		/* Must fit in a 15 bit count of HUNK_UNIT */
+		__ASSERT(bytes / CHUNK_UNIT <= 0x7fffU, "heap size is too big");
+	} else {
+		/* Must fit in a 31 bit count of HUNK_UNIT */
+		__ASSERT(bytes / CHUNK_UNIT <= 0x7fffffffU, "heap size is too big");
+	}
 
 	/* Reserve the end marker chunk's header */
 	__ASSERT(bytes > heap_footer_bytes(bytes), "heap size is too small");

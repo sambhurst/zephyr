@@ -112,3 +112,11 @@
 		label = "FXOS8700";
 	};
 };
+
+&edma0 {
+	status = "okay";
+};
+
+&lpspi1 {
+	status = "okay";
+};
