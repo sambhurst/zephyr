@@ -232,12 +232,17 @@ current :ref:`stability level <api_lifecycle>`.
      - 1.0
      - 2.6
 
+   * - :ref:`pinctrl_api`
+     - Experimental
+     - 3.0
+     - 3.0
+
    * - :ref:`pinmux_api`
      - Stable
      - 1.0
      - 1.11
 
-   * - :ref:`power_management_api`
+   * - :ref:`pm_api`
      - Experimental
      - 1.2
      - 2.2

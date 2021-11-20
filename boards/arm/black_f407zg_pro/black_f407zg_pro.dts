@@ -18,7 +18,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,ccm = &ccm0;
-		zephyr,can-primary = &can2;
+		zephyr,canbus = &can2;
 	};
 
 	leds {
@@ -103,7 +103,7 @@
 	status = "okay";
 };
 
-&usbotg_fs {
+zephyr_udc0: &usbotg_fs {
 	pinctrl-0 = <&usb_otg_fs_dm_pa11 &usb_otg_fs_dp_pa12>;
 	status = "okay";
 };

@@ -4,26 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <device.h>
 #include <zephyr.h>
 #include <kernel.h>
 #include <timeout_q.h>
 #include <init.h>
 #include <string.h>
+#include <pm/device.h>
+#include <pm/device_runtime.h>
 #include <pm/pm.h>
 #include <pm/state.h>
 #include <pm/policy.h>
 #include <tracing/tracing.h>
 
-#include "pm_priv.h"
-
 #define PM_STATES_LEN (1 + PM_STATE_SOFT_OFF - PM_STATE_ACTIVE)
-#define LOG_LEVEL CONFIG_PM_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(power);
+LOG_MODULE_REGISTER(pm, CONFIG_PM_LOG_LEVEL);
 
-static int post_ops_done = 1;
-static struct pm_state_info z_power_state;
+static bool post_ops_done = true;
 static sys_slist_t pm_notifiers = SYS_SLIST_STATIC_INIT(&pm_notifiers);
+static struct pm_state_info z_power_states[CONFIG_MP_NUM_CPUS];
+/* bitmask to check if a power state was forced. */
+static ATOMIC_DEFINE(z_power_states_forced, CONFIG_MP_NUM_CPUS);
+#ifdef CONFIG_PM_DEVICE
+static atomic_t z_cpus_active = ATOMIC_INIT(CONFIG_MP_NUM_CPUS);
+#endif
 static struct k_spinlock pm_notifier_lock;
 
 #ifdef CONFIG_PM_STATS
@@ -100,6 +105,64 @@ static inline void pm_stop_timer(void) {}
 static void pm_stats_update(enum pm_state state) {}
 #endif
 
+#ifdef CONFIG_PM_DEVICE
+extern const struct device *__pm_device_slots_start[];
+
+/* Number of devices successfully suspended. */
+static size_t num_susp;
+
+static int pm_suspend_devices(void)
+{
+	const struct device *devs;
+	size_t devc;
+
+	devc = z_device_get_all_static(&devs);
+
+	num_susp = 0;
+
+	for (const struct device *dev = devs + devc - 1; dev >= devs; dev--) {
+		int ret;
+
+		/*
+		 * ignore busy devices, wake up source and devices with
+		 * runtime PM enabled.
+		 */
+		if (pm_device_is_busy(dev) ||
+		    pm_device_wakeup_is_enabled(dev) ||
+		    ((dev->pm != NULL) && pm_device_runtime_is_enabled(dev))) {
+			continue;
+		}
+
+		ret = pm_device_state_set(dev, PM_DEVICE_STATE_SUSPENDED);
+		/* ignore devices not supporting or already at the given state */
+		if ((ret == -ENOSYS) || (ret == -ENOTSUP) || (ret == -EALREADY)) {
+			continue;
+		} else if (ret < 0) {
+			LOG_ERR("Device %s did not enter %s state (%d)",
+				dev->name,
+				pm_device_state_str(PM_DEVICE_STATE_SUSPENDED),
+				ret);
+			return ret;
+		}
+
+		__pm_device_slots_start[num_susp] = dev;
+		num_susp++;
+	}
+
+	return 0;
+}
+
+static void pm_resume_devices(void)
+{
+	for (int i = (num_susp - 1); i >= 0; i--) {
+		pm_device_state_set(__pm_device_slots_start[i],
+				    PM_DEVICE_STATE_ACTIVE);
+	}
+
+	num_susp = 0;
+}
+#endif	/* CONFIG_PM_DEVICE */
+
 static inline void exit_pos_ops(struct pm_state_info info)
 {
 	extern __weak void
@@ -148,7 +211,7 @@ static inline void pm_state_notify(bool entering_state)
 		}
 
 		if (callback) {
-			callback(z_power_state.state);
+			callback(z_power_states[_current_cpu->id].state);
 		}
 	}
 	k_spin_unlock(&pm_notifier_lock, pm_notifier_key);
@@ -172,65 +235,59 @@ void pm_system_resume(void)
 	 * notification is not required.
 	 */
 	if (!post_ops_done) {
-		post_ops_done = 1;
-		exit_pos_ops(z_power_state);
+		uint8_t id = _current_cpu->id;
+
+		post_ops_done = true;
+		exit_pos_ops(z_power_states[id]);
 		pm_state_notify(false);
+		z_power_states[id] = (struct pm_state_info){PM_STATE_ACTIVE,
+			0, 0};
 	}
 }
 
-void pm_power_state_force(struct pm_state_info info)
+bool pm_power_state_force(uint8_t cpu, struct pm_state_info info)
 {
+	bool ret = false;
+
 	__ASSERT(info.state < PM_STATES_LEN,
 		 "Invalid power state %d!", info.state);
 
-	if (info.state == PM_STATE_ACTIVE) {
-		return;
+
+	if (!atomic_test_and_set_bit(z_power_states_forced, cpu)) {
+		z_power_states[cpu] = info;
+		ret = true;
 	}
 
-	(void)arch_irq_lock();
-	z_power_state = info;
-	post_ops_done = 0;
-	pm_state_notify(true);
-
-	k_sched_lock();
-	pm_start_timer();
-	/* Enter power state */
-	pm_state_set(z_power_state);
-	pm_stop_timer();
-
-	pm_system_resume();
-	k_sched_unlock();
+	return ret;
 }
 
-#if CONFIG_PM_DEVICE
-static enum pm_state _handle_device_abort(struct pm_state_info info)
+bool pm_system_suspend(int32_t ticks)
 {
-	LOG_DBG("Some devices didn't enter suspend state!");
-	pm_resume_devices();
+	bool ret = true;
+	uint8_t id = _current_cpu->id;
 
-	z_power_state.state = PM_STATE_ACTIVE;
-	return PM_STATE_ACTIVE;
-}
-#endif
-
-enum pm_state pm_system_suspend(int32_t ticks)
-{
 	SYS_PORT_TRACING_FUNC_ENTER(pm, system_suspend, ticks);
-	z_power_state = pm_policy_next_state(ticks);
-	if (z_power_state.state == PM_STATE_ACTIVE) {
-		LOG_DBG("No PM operations done.");
-		SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks, z_power_state.state);
-		return z_power_state.state;
+
+	if (!atomic_test_and_set_bit(z_power_states_forced, id)) {
+		z_power_states[id] = pm_policy_next_state(id, ticks);
 	}
-	post_ops_done = 0;
+
+	if (z_power_states[id].state == PM_STATE_ACTIVE) {
+		LOG_DBG("No PM operations done.");
+		SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks,
+				   z_power_states[id].state);
+		ret = false;
+		goto end;
+	}
+	post_ops_done = false;
 
 	if (ticks != K_TICKS_FOREVER) {
 		/*
 		 * Just a sanity check in case the policy manager does not
 		 * handle this error condition properly.
 		 */
-		__ASSERT(z_power_state.min_residency_us >=
-			z_power_state.exit_latency_us,
+		__ASSERT(z_power_states[id].min_residency_us >=
+			z_power_states[id].exit_latency_us,
 			"min_residency_us < exit_latency_us");
 
 		/*
@@ -238,38 +295,23 @@ enum pm_state pm_system_suspend(int32_t ticks)
 		 * accommodate the time required by the CPU to fully wake up.
 		 */
 		z_set_timeout_expiry(ticks -
-		     k_us_to_ticks_ceil32(z_power_state.exit_latency_us), true);
+		     k_us_to_ticks_ceil32(
+			     z_power_states[id].exit_latency_us),
+				     true);
 	}
 
 #if CONFIG_PM_DEVICE
-
-	bool should_resume_devices = true;
-
-	switch (z_power_state.state) {
-	case PM_STATE_SUSPEND_TO_IDLE:
-		__fallthrough;
-	case PM_STATE_STANDBY:
-		/* low power peripherals. */
-		if (pm_low_power_devices()) {
-			SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend,
-					ticks, _handle_device_abort(z_power_state));
-			return _handle_device_abort(z_power_state);
-		}
-		break;
-	case PM_STATE_SUSPEND_TO_RAM:
-		__fallthrough;
-	case PM_STATE_SUSPEND_TO_DISK:
-		__fallthrough;
-	case PM_STATE_SOFT_OFF:
+	if ((z_power_states[id].state != PM_STATE_RUNTIME_IDLE) &&
+			(atomic_sub(&z_cpus_active, 1) == 1)) {
 		if (pm_suspend_devices()) {
-			SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend,
-					ticks, _handle_device_abort(z_power_state));
-			return _handle_device_abort(z_power_state);
+			pm_resume_devices();
+			z_power_states[id].state = PM_STATE_ACTIVE;
+			(void)atomic_add(&z_cpus_active, 1);
+			SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks,
+				_handle_device_abort(z_power_states[id]));
+			ret = false;
+			goto end;
 		}
-		break;
-	default:
-		should_resume_devices = false;
-		break;
 	}
 #endif
 	/*
@@ -285,21 +327,24 @@ enum pm_state pm_system_suspend(int32_t ticks)
 	pm_start_timer();
 	/* Enter power state */
 	pm_state_notify(true);
-	pm_state_set(z_power_state);
+	pm_state_set(z_power_states[id]);
 	pm_stop_timer();
 
 	/* Wake up sequence starts here */
 #if CONFIG_PM_DEVICE
-	if (should_resume_devices) {
-		/* Turn on peripherals and restore device states as necessary */
+	if (atomic_add(&z_cpus_active, 1) == 0) {
 		pm_resume_devices();
 	}
 #endif
-	pm_stats_update(z_power_state.state);
+	pm_stats_update(z_power_states[id].state);
 	pm_system_resume();
 	k_sched_unlock();
-	SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks, z_power_state.state);
-	return z_power_state.state;
+	SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks,
+				   z_power_states[id].state);
+
+end:
+	atomic_clear_bit(z_power_states_forced, id);
+	return ret;
 }
 
 void pm_notifier_register(struct pm_notifier *notifier)
@@ -322,4 +367,9 @@ int pm_notifier_unregister(struct pm_notifier *notifier)
 	k_spin_unlock(&pm_notifier_lock, pm_notifier_key);
 
 	return ret;
+}
+
+const struct pm_state_info pm_power_state_next_get(uint8_t cpu)
+{
+	return z_power_states[cpu];
 }

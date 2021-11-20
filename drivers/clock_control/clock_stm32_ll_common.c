@@ -199,7 +199,7 @@ static inline int stm32_clock_control_off(const struct device *dev,
 	defined(CONFIG_SOC_SERIES_STM32WLX) || \
 	defined(CONFIG_SOC_SERIES_STM32G4X)
 	case STM32_CLOCK_BUS_AHB3:
-		LL_AHB3_GRP1_EnableClock(pclken->enr);
+		LL_AHB3_GRP1_DisableClock(pclken->enr);
 		break;
 #endif /* CONFIG_SOC_SERIES_STM32_* */
 	case STM32_CLOCK_BUS_APB1:
@@ -726,5 +726,5 @@ DEVICE_DT_DEFINE(DT_NODELABEL(rcc),
 		    NULL,
 		    NULL, NULL,
 		    PRE_KERNEL_1,
-		    CONFIG_CLOCK_CONTROL_STM32_DEVICE_INIT_PRIORITY,
+		    CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 		    &stm32_clock_control_api);

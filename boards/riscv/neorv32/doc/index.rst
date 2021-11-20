@@ -45,6 +45,8 @@ Processor (SoC):
 | UART      | on-chip    | serial port-polling;                |
 |           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
+| TRNG      | on-chip    | entropy                             |
++-----------+------------+-------------------------------------+
 
 The default board configuration for the NEORV32 Processor (SoC) can be found in
 the defconfig file: :file:`boards/riscv/neorv32/neorv32_defconfig`.
@@ -93,6 +95,14 @@ system console.
    standard NEORV32 bootloader. The baudrate can be changed by modifying the
    ``current-speed`` property of the ``uart0`` devicetree node.
 
+True Random-Number Generator
+============================
+
+The True Random-Number Generator (TRNG) of the NEORV32 is supported, but
+disabled by default. For NEORV32 SoC implementations supporting the TRNG,
+support can be enabled by setting the ``status`` property of the ``trng``
+devicetree node to ``okay``.
+
 Programming and Debugging
 *************************
 
@@ -130,6 +140,17 @@ implementation with the On-Chip Debugger (OCD) and bootloader enabled.
    :board: neorv32
    :goals: flash
 
+The default board configuration uses an :ref:`openocd-debug-host-tools`
+configuration similar to the example provided by the NEORV32 project. Other
+JTAGs can be used by providing further arguments when building. Here is an
+example for using the Flyswatter JTAG:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: neorv32
+   :goals: flash
+   :gen-args: -DBOARD_RUNNER_ARGS_openocd="--config;interface/ftdi/flyswatter.cfg;--config;neorv32.cfg;--cmd-pre-init;'adapter speed 2000'"
+
 After flashing, you should see message similar to the following in the terminal:
 
 .. code-block:: console
@@ -147,6 +168,16 @@ the NEORV32 user guide. If the :kconfig:`CONFIG_BUILD_OUTPUT_BIN` is enabled and
 the NEORV32 ``image_gen`` binary is available, the build system will
 automatically generate a :file:`zephyr.vhd` file suitable for initialising the
 internal instruction memory of the NEORV32.
+
+In order for the build system to automatically detect the ``image_gen`` binary
+it needs to be in the :envvar:`PATH` environment variable. If not, the path
+can be passed at build time:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: neorv32
+   :goals: build
+   :gen-args: -DCMAKE_PROGRAM_PATH=<path/to/neorv32/sw/image_gen/>
 
 Uploading via UART
 ==================

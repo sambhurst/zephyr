@@ -139,6 +139,11 @@ static int spi_mcux_configure(const struct device *dev,
 		return 0;
 	}
 
+	if (spi_cfg->operation & SPI_HALF_DUPLEX) {
+		LOG_ERR("Half-duplex not supported");
+		return -ENOTSUP;
+	}
+
 	LPSPI_MasterGetDefaultConfig(&master_config);
 
 	if (spi_cfg->slave > CHIP_SELECT_COUNT) {
@@ -192,7 +197,6 @@ static int spi_mcux_configure(const struct device *dev,
 	LPSPI_SetDummyData(base, 0);
 
 	data->ctx.config = spi_cfg;
-	spi_context_cs_configure(&data->ctx);
 
 	return 0;
 }
@@ -258,10 +262,16 @@ static int spi_mcux_release(const struct device *dev,
 
 static int spi_mcux_init(const struct device *dev)
 {
+	int err;
 	const struct spi_mcux_config *config = dev->config;
 	struct spi_mcux_data *data = dev->data;
 
 	config->irq_config_func(dev);
+
+	err = spi_context_cs_configure_all(&data->ctx);
+	if (err < 0) {
+		return err;
+	}
 
 	spi_context_unlock_unconditionally(&data->ctx);
 
@@ -301,12 +311,13 @@ static const struct spi_driver_api spi_mcux_driver_api = {
 	static struct spi_mcux_data spi_mcux_data_##n = {		\
 		SPI_CONTEXT_INIT_LOCK(spi_mcux_data_##n, ctx),		\
 		SPI_CONTEXT_INIT_SYNC(spi_mcux_data_##n, ctx),		\
+		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(n), ctx)	\
 	};								\
 									\
 	DEVICE_DT_INST_DEFINE(n, &spi_mcux_init, NULL,			\
 			    &spi_mcux_data_##n,				\
 			    &spi_mcux_config_##n, POST_KERNEL,		\
-			    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,		\
+			    CONFIG_SPI_INIT_PRIORITY,			\
 			    &spi_mcux_driver_api);			\
 									\
 	static void spi_mcux_config_func_##n(const struct device *dev)	\

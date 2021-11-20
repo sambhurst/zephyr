@@ -299,7 +299,6 @@ int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
 	k_sem_init(&sync_sem, 0, 1);
 	cmd(buf)->sync = &sync_sem;
 
-	/* Make sure the buffer stays around until the command completes */
 	net_buf_put(&bt_dev.cmd_tx_queue, net_buf_ref(buf));
 
 	err = k_sem_take(&sync_sem, HCI_CMD_TIMEOUT);
@@ -2198,7 +2197,7 @@ static const struct event_handler meta_events[] = {
 #endif /* defined(CONFIG_BT_PER_ADV_SYNC) */
 #endif /* defined(CONFIG_BT_EXT_ADV) */
 #if defined(CONFIG_BT_ISO_UNICAST)
-	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_ESTABLISHED, hci_le_cis_estabilished,
+	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_ESTABLISHED, hci_le_cis_established,
 		      sizeof(struct bt_hci_evt_le_cis_established)),
 	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_REQ, hci_le_cis_req,
 		      sizeof(struct bt_hci_evt_le_cis_req)),
@@ -3565,7 +3564,7 @@ int bt_enable(bt_ready_cb_t cb)
 		if (err) {
 			return err;
 		}
-	} else {
+	} else if (IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
 		err = bt_set_name(CONFIG_BT_DEVICE_NAME);
 		if (err) {
 			BT_WARN("Failed to set device name (%d)", err);

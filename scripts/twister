@@ -635,6 +635,7 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
                         help="""Script for controlling pseudoterminal.
                         Twister believes that it interacts with a terminal
                         when it actually interacts with the script.
+                        Not supported on Windows OS.
 
                         E.g "twister --device-testing
                         --device-serial-pty <script>
@@ -838,6 +839,10 @@ def main():
 
     if not options.coverage_platform:
         options.coverage_platform = options.platform
+
+    if options.device_serial_pty and os.name == "nt":  # OS is Windows
+        logger.error("--device-serial-pty is not supported on Windows OS")
+        sys.exit(1)
 
     if options.size:
         for fn in options.size:
@@ -1178,11 +1183,13 @@ def main():
 
         sliced_instances = islice(to_run.items(), start, end)
         skipped = {k : v for k,v in suite.instances.items() if v.status == 'skipped'}
+        errors = {k : v for k,v in suite.instances.items() if v.status == 'error'}
         suite.instances = OrderedDict(sliced_instances)
         if subset == 1:
-            # add all pre-filtered tests that are skipped to the first set to
-            # allow for better distribution among all sets.
+            # add all pre-filtered tests that are skipped or got error status
+            # to the first set to allow for better distribution among all sets.
             suite.instances.update(skipped)
+            suite.instances.update(errors)
 
     if options.save_tests:
         suite.csv_report(options.save_tests)
@@ -1320,5 +1327,6 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        if os.isatty(1): # stdout is interactive
+        if (os.name != "nt") and os.isatty(1):
+            # (OS is not Windows) and (stdout is interactive)
             os.system("stty sane")

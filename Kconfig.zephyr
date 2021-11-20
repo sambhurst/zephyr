@@ -309,7 +309,7 @@ config NO_OPTIMIZATIONS
 endchoice
 
 config COMPILER_COLOR_DIAGNOSTICS
-	bool "Enable colored diganostics"
+	bool "Enable colored diagnostics"
 	default y
 	help
 	  Compiler diagnostic messages are colorized.
@@ -506,7 +506,30 @@ config MAKEFILE_EXPORTS
 	  Generates a file with build information that can be read by
 	  third party Makefile-based build systems.
 
+config BUILD_OUTPUT_META
+	bool "Create a build meta file"
+	help
+	  Create a build meta file in the build directory containing lists of:
+	  - Zephyr: path and revision (if git repo)
+	  - Zephyr modules: name, path, and revision (if git repo)
+	  - West projects: path and revision
+	  File extension is .meta
+
 endmenu
+
+config EXPERIMENTAL
+	bool
+	help
+	  Symbol that must be selected by a feature if it is considered to be
+	  at an experimental implementation stage.
+
+config WARN_EXPERIMENTAL
+	bool
+	prompt "Warn on experimental usage"
+	help
+	  Print a warning when the Kconfig tree is parsed if any experimental
+	  features are enabled.
+
 endmenu
 
 

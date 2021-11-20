@@ -90,6 +90,15 @@
 			compatible = "vnd,enum-int-required-false-holder";
 		};
 
+		enum-6 {
+			compatible = "vnd,enum-holder-inst";
+			val = "zero";
+		};
+
+		enum-7 {
+			compatible = "vnd,enum-required-false-holder-inst";
+		};
+
 		/*
 		 * This should be the only node with this
 		 * compatible in the tree.
@@ -221,6 +230,20 @@
 			};
 		};
 
+		test_mbox: mbox {
+			label = "TEST_MBOX";
+			compatible = "vnd,mbox";
+			#mbox-cells = <1>;
+			status = "okay";
+		};
+
+		test_mbox_zero_cell: mbox_zero_cell {
+			label = "TEST_MBOX_ZERO_CELL";
+			compatible = "vnd,mbox-zero-cell";
+			#mbox-cells = <0>;
+			status = "okay";
+		};
+
 		test_spi: spi@33334444 {
 			#address-cells = < 1 >;
 			#size-cells = < 0 >;
@@ -324,6 +347,8 @@
 			pinctrl-1 = <&test_pincfg_c &test_pincfg_d>;
 			pinctrl-2 = <&test_pincfg_d>;
 			pinctrl-names = "default", "sleep", "f.o.o2";
+			mboxes = <&test_mbox 1>, <&test_mbox 2>, <&test_mbox_zero_cell>;
+			mbox-names = "tx", "rx", "zero";
 		};
 
 		/* there should only be one of these */
@@ -423,6 +448,31 @@
 						ggc-prop = <42>;
 					};
 				};
+			};
+		};
+
+		test-ranges {
+			#address-cells = <2>;
+			#size-cells = <1>;
+
+			test_ranges_pcie: pcie@0 {
+				compatible = "vnd,pcie";
+				reg = <0 0 1>;
+				#address-cells = <3>;
+				#size-cells = <2>;
+
+				ranges = <0x1000000 0 0 0 0x3eff0000 0 0x10000>,
+					 <0x2000000 0 0x10000000 0 0x10000000 0 0x2eff0000>,
+					 <0x3000000 0x80 0 0x80 0 0x80 0>;
+			};
+
+			test_ranges_other: other@1 {
+				reg = <0 1 1>;
+				#address-cells = <2>;
+				#size-cells = <1>;
+
+				ranges = <0x0 0x0 0x0 0x3eff0000 0x10000>,
+				         <0x0 0x10000000 0x0 0x10000000 0x2eff0000>;
 			};
 		};
 	};

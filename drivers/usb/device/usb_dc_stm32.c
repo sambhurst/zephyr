@@ -44,8 +44,8 @@ LOG_MODULE_REGISTER(usb_dc_stm32);
 #elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32_usb)
 #define DT_DRV_COMPAT st_stm32_usb
 #define USB_IRQ_NAME  usb
-#if DT_INST_NODE_HAS_PROP(0, enable_pin_remap)
-#define USB_ENABLE_PIN_REMAP	__DEPRECATED_MACRO DT_INST_PROP(0, enable_pin_remap)
+#if DT_INST_PROP(0, enable_pin_remap)
+#define USB_ENABLE_PIN_REMAP	DT_INST_PROP(0, enable_pin_remap)
 #warning "Property deprecated in favor of property 'remap-pa11-pa12' from 'st-stm32-pinctrl'"
 #endif
 #endif
@@ -203,12 +203,13 @@ static int usb_dc_stm32_clock_enable(void)
 #if defined(RCC_HSI48_SUPPORT) || \
 	defined(CONFIG_SOC_SERIES_STM32WBX) || \
 	defined(CONFIG_SOC_SERIES_STM32H7X) || \
-	defined(CONFIG_SOC_SERIES_STM32L5X)
+	defined(CONFIG_SOC_SERIES_STM32L5X) || \
+	defined(CONFIG_SOC_SERIES_STM32U5X)
 
 	/*
 	 * In STM32L0 series, HSI48 requires VREFINT and its buffer
 	 * with 48 MHz RC to be enabled.
-	 * See ENREF_HSI48 in referenc maual RM0367 section10.2.3:
+	 * See ENREF_HSI48 in reference manual RM0367 section10.2.3:
 	 * "Reference control and status register (SYSCFG_CFGR3)"
 	 */
 #ifdef CONFIG_SOC_SERIES_STM32L0X
@@ -229,6 +230,11 @@ static int usb_dc_stm32_clock_enable(void)
 	}
 
 	LL_RCC_SetUSBClockSource(LL_RCC_USB_CLKSOURCE_HSI48);
+
+#ifdef CONFIG_SOC_SERIES_STM32U5X
+	/* VDDUSB independent USB supply (PWR clock is on) */
+	LL_PWR_EnableVDDUSB();
+#endif /* CONFIG_SOC_SERIES_STM32U5X */
 
 #if !defined(CONFIG_SOC_SERIES_STM32WBX)
 	/* Specially for STM32WB, don't unlock the HSEM to prevent M0 core
