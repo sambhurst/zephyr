@@ -17,7 +17,8 @@
 #include <pm/policy.h>
 #include <tracing/tracing.h>
 
-#define PM_STATES_LEN (1 + PM_STATE_SOFT_OFF - PM_STATE_ACTIVE)
+#include "pm_stats.h"
+
 #include <logging/log.h>
 LOG_MODULE_REGISTER(pm, CONFIG_PM_LOG_LEVEL);
 
@@ -31,79 +32,7 @@ static atomic_t z_cpus_active = ATOMIC_INIT(CONFIG_MP_NUM_CPUS);
 #endif
 static struct k_spinlock pm_notifier_lock;
 
-#ifdef CONFIG_PM_STATS
 
-#include <stats/stats.h>
-#include <sys/util_macro.h>
-
-
-struct pm_cpu_timing {
-	uint32_t timer_start;
-	uint32_t timer_end;
-};
-
-static struct pm_cpu_timing pm_cpu_timings[CONFIG_MP_NUM_CPUS];
-
-static inline void pm_start_timer(void)
-{
-	pm_cpu_timings[_current_cpu->id].timer_start = k_cycle_get_32();
-}
-
-static inline void pm_stop_timer(void)
-{
-	pm_cpu_timings[_current_cpu->id].timer_end = k_cycle_get_32();
-}
-
-STATS_SECT_START(pm_cpu_stats)
-STATS_SECT_ENTRY32(state_count)
-STATS_SECT_ENTRY32(state_last_cycles)
-STATS_SECT_ENTRY32(state_total_cycles)
-STATS_SECT_END;
-
-STATS_NAME_START(pm_cpu_stats)
-STATS_NAME(pm_cpu_stats, state_count)
-STATS_NAME(pm_cpu_stats, state_last_cycles)
-STATS_NAME(pm_cpu_stats, state_total_cycles)
-STATS_NAME_END(pm_cpu_stats);
-
-#define PM_STAT_NAME_LEN sizeof("pm_cpu_XXX_state_X_stats")
-static char pm_cpu_stat_names[CONFIG_MP_NUM_CPUS][PM_STATES_LEN][PM_STAT_NAME_LEN];
-static struct stats_pm_cpu_stats pm_cpu_stats[CONFIG_MP_NUM_CPUS][PM_STATES_LEN];
-
-static int pm_stats_init(const struct device *unused)
-{
-	for (int i = 0; i < CONFIG_MP_NUM_CPUS; i++) {
-		for (int j = 0; j < PM_STATES_LEN; j++) {
-			snprintk(pm_cpu_stat_names[i][j], PM_STAT_NAME_LEN,
-				 "pm_cpu_%03d_state_%1d_stats", i, j);
-			stats_init(&(pm_cpu_stats[i][j].s_hdr), STATS_SIZE_32, 3,
-				   STATS_NAME_INIT_PARMS(pm_cpu_stats));
-			stats_register(pm_cpu_stat_names[i][j], &(pm_cpu_stats[i][j].s_hdr));
-		}
-	}
-	return 0;
-}
-
-SYS_INIT(pm_stats_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
-
-static void pm_stats_update(enum pm_state state)
-{
-	uint8_t cpu = _current_cpu->id;
-	uint32_t time_total =
-		pm_cpu_timings[cpu].timer_end -
-		pm_cpu_timings[cpu].timer_start;
-
-	STATS_INC(pm_cpu_stats[cpu][state], state_count);
-	STATS_INCN(pm_cpu_stats[cpu][state], state_total_cycles, time_total);
-	STATS_SET(pm_cpu_stats[cpu][state], state_last_cycles, time_total);
-}
-#else
-static inline void pm_start_timer(void) {}
-static inline void pm_stop_timer(void) {}
-
-
-static void pm_stats_update(enum pm_state state) {}
-#endif
 
 #ifdef CONFIG_PM_DEVICE
 extern const struct device *__pm_device_slots_start[];
@@ -249,7 +178,7 @@ bool pm_power_state_force(uint8_t cpu, struct pm_state_info info)
 {
 	bool ret = false;
 
-	__ASSERT(info.state < PM_STATES_LEN,
+	__ASSERT(info.state < PM_STATE_COUNT,
 		 "Invalid power state %d!", info.state);
 
 
@@ -324,11 +253,11 @@ bool pm_system_suspend(int32_t ticks)
 	 * sent the notification in pm_system_resume().
 	 */
 	k_sched_lock();
-	pm_start_timer();
+	pm_stats_start();
 	/* Enter power state */
 	pm_state_notify(true);
 	pm_state_set(z_power_states[id]);
-	pm_stop_timer();
+	pm_stats_stop();
 
 	/* Wake up sequence starts here */
 #if CONFIG_PM_DEVICE
