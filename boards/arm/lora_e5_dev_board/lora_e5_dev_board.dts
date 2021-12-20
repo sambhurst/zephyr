@@ -132,18 +132,21 @@
 
 &lpuart1 {
 	pinctrl-0 = <&lpuart1_tx_pc1 &lpuart1_rx_pc0>;
+	pinctrl-names = "default";
 	current-speed = <115200>;
 	status = "okay";
 };
 
 &usart1 {
 	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
+	pinctrl-names = "default";
 	current-speed = <115200>;
 	status = "okay";
 };
 
 &usart2 {
 	pinctrl-0 = <&usart2_tx_pa2 &usart2_rx_pa3>;
+	pinctrl-names = "default";
 	current-speed = <115200>;
 	status = "okay";
 	/* PB4 can select RS-485 TX, when J17 (A4) is closed */
@@ -151,6 +154,7 @@
 
 &i2c2 {
 	pinctrl-0 = <&i2c2_scl_pb15 &i2c2_sda_pa15>;
+	pinctrl-names = "default";
 	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 
@@ -161,6 +165,7 @@
 &spi2 {
 	pinctrl-0 = <&spi2_nss_pb9 &spi2_sck_pb13
 		     &spi2_miso_pb14 &spi2_mosi_pa10>;
+	pinctrl-names = "default";
 	status = "okay";
 
 	/* unpopulated footprint for spi flash */
@@ -176,6 +181,7 @@
 
 &adc1 {
 	pinctrl-0 = <&adc_in2_pb3>;
+	pinctrl-names = "default";
 	status = "okay";
 };
 

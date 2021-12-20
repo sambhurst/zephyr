@@ -28,7 +28,7 @@
 
 #if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_SYNC_RECEIVER)
 NET_BUF_POOL_FIXED_DEFINE(iso_rx_pool, CONFIG_BT_ISO_RX_BUF_COUNT,
-			  CONFIG_BT_ISO_RX_MTU, NULL);
+			  CONFIG_BT_ISO_RX_MTU, 8, NULL);
 
 static struct bt_iso_recv_info iso_info_data[CONFIG_BT_ISO_RX_BUF_COUNT];
 #define iso_info(buf) (&iso_info_data[net_buf_id(buf)])
@@ -36,11 +36,11 @@ static struct bt_iso_recv_info iso_info_data[CONFIG_BT_ISO_RX_BUF_COUNT];
 
 #if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_BROADCAST)
 NET_BUF_POOL_FIXED_DEFINE(iso_tx_pool, CONFIG_BT_ISO_TX_BUF_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8, NULL);
 
 #if CONFIG_BT_ISO_TX_FRAG_COUNT > 0
 NET_BUF_POOL_FIXED_DEFINE(iso_frag_pool, CONFIG_BT_ISO_TX_FRAG_COUNT,
-			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU), 8, NULL);
 #endif /* CONFIG_BT_ISO_TX_FRAG_COUNT > 0 */
 #endif /* CONFIG_BT_ISO_UNICAST || CONFIG_BT_ISO_BROADCAST */
 
@@ -438,29 +438,29 @@ static void bt_iso_chan_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 			 * move it for the central
 			 */
 			bt_iso_remove_data_path(chan->iso);
-		}
 
 #if defined(CONFIG_BT_ISO_UNICAST)
-		bool is_chan_connected;
-		struct bt_iso_cig *cig;
+			bool is_chan_connected;
+			struct bt_iso_cig *cig;
 
-		/* Update CIG state */
-		cig = get_cig(chan);
-		__ASSERT(cig != NULL, "CIG was NULL");
+			/* Update CIG state */
+			cig = get_cig(chan);
+			__ASSERT(cig != NULL, "CIG was NULL");
 
-		is_chan_connected = false;
-		SYS_SLIST_FOR_EACH_CONTAINER(&cig->cis_channels, chan, node) {
-			if (chan->state == BT_ISO_CONNECTED ||
-			    chan->state == BT_ISO_CONNECT) {
-				is_chan_connected = true;
-				break;
+			is_chan_connected = false;
+			SYS_SLIST_FOR_EACH_CONTAINER(&cig->cis_channels, chan, node) {
+				if (chan->state == BT_ISO_CONNECTED ||
+				chan->state == BT_ISO_CONNECT) {
+					is_chan_connected = true;
+					break;
+				}
 			}
-		}
 
-		if (!is_chan_connected) {
-			cig->state = BT_ISO_CIG_STATE_INACTIVE;
-		}
+			if (!is_chan_connected) {
+				cig->state = BT_ISO_CIG_STATE_INACTIVE;
+			}
 #endif /* CONFIG_BT_ISO_UNICAST */
+		}
 	}
 
 	if (chan->ops->disconnected) {

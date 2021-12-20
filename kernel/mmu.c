@@ -181,8 +181,8 @@ void z_page_frames_dump(void)
  * Note that bit #0 is the highest address so that allocation is
  * done in reverse from highest address.
  */
-SYS_BITARRAY_DEFINE(virt_region_bitmap,
-		    CONFIG_KERNEL_VM_SIZE / CONFIG_MMU_PAGE_SIZE);
+SYS_BITARRAY_DEFINE_STATIC(virt_region_bitmap,
+			   CONFIG_KERNEL_VM_SIZE / CONFIG_MMU_PAGE_SIZE);
 
 static bool virt_region_inited;
 
@@ -380,7 +380,10 @@ static void free_page_frame_list_put(struct z_page_frame *pf)
 {
 	PF_ASSERT(pf, z_page_frame_is_available(pf),
 		 "unavailable page put on free list");
-	sys_slist_append(&free_page_frame_list, &pf->node);
+	/* The structure is packed, which ensures that this is true */
+	void *node = pf;
+
+	sys_slist_append(&free_page_frame_list, node);
 	z_free_page_count++;
 }
 

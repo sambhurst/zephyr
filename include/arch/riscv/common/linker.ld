@@ -82,8 +82,8 @@ MEMORY
     RAM (rwx) : ORIGIN = RAM_BASE, LENGTH = RAM_SIZE
 
     /* Data & Instruction Tightly Coupled Memory */
-    LINKER_DT_REGION_FROM_NODE(ITCM, rw, DT_CHOSEN(zephyr_itcm))
-    LINKER_DT_REGION_FROM_NODE(DTCM, rw, DT_CHOSEN(zephyr_dtcm))
+    LINKER_DT_REGION_FROM_NODE(DT_CHOSEN(zephyr_itcm), rw)
+    LINKER_DT_REGION_FROM_NODE(DT_CHOSEN(zephyr_dtcm), rw)
 
     /* Used by and documented in include/linker/intlist.ld */
     IDT_LIST  (wx)      : ORIGIN = 0xFFFFF7FF, LENGTH = 2K
@@ -243,7 +243,6 @@ SECTIONS
 	}  GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
 
 #include <linker/common-noinit.ld>
-#include <linker/cplusplus-ram.ld>
 
     SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,)
 	{
@@ -287,6 +286,7 @@ SECTIONS
 
 #include <linker/common-ram.ld>
 #include <linker/kobject-data.ld>
+#include <linker/cplusplus-ram.ld>
 
 /* Located in generated directory. This file is populated by the
  * zephyr_linker_sources() Cmake function.

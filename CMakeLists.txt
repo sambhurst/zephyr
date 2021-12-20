@@ -880,7 +880,7 @@ if(CONFIG_USERSPACE)
     OUTPUT ${APP_SMEM_UNALIGNED_LD} ${APP_SMEM_PINNED_UNALIGNED_LD}
     COMMAND ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
-    -d ${OBJ_FILE_DIR}
+    -f ${CMAKE_BINARY_DIR}/compile_commands.json
     -o ${APP_SMEM_UNALIGNED_LD}
     $<$<BOOL:${APP_SMEM_PINNED_UNALIGNED_LD}>:--pinoutput=${APP_SMEM_PINNED_UNALIGNED_LD}>
     ${APP_SMEM_PINNED_PARTITION_LIST_ARG}
@@ -1470,6 +1470,7 @@ if(CONFIG_BUILD_OUTPUT_META)
             ${ZEPHYR_MODULES_ARG}
             ${ZEPHYR_EXTRA_MODULES_ARG}
             --meta-out ${KERNEL_META_NAME}
+            $<$<BOOL:${CONFIG_BUILD_OUTPUT_META_STATE_PROPAGATE}>:--meta-state-propagate>
   )
   list(APPEND
     post_build_byproducts
@@ -1479,12 +1480,14 @@ endif()
 
 # Cleanup intermediate files
 if(CONFIG_CLEANUP_INTERMEDIATE_FILES)
+  foreach(index RANGE ${ZEPHYR_CURRENT_LINKER_PASS})
+    # Those files can be very large in some cases, delete them as we do not need them.
     list(APPEND
       post_build_commands
       COMMAND
-      # This file can be very large in some cases, delete it as we do not need it.
-      ${CMAKE_COMMAND} -E remove ${ZEPHYR_LINK_STAGE_EXECUTABLE}.elf
+      ${CMAKE_COMMAND} -E remove zephyr_pre${index}.elf
       )
+  endforeach()
 endif()
 
 if(CONFIG_BUILD_OUTPUT_S19)

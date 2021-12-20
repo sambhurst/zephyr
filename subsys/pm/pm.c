@@ -22,7 +22,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(pm, CONFIG_PM_LOG_LEVEL);
 
-static bool post_ops_done = true;
+static ATOMIC_DEFINE(z_post_ops_required, CONFIG_MP_NUM_CPUS);
 static sys_slist_t pm_notifiers = SYS_SLIST_STATIC_INIT(&pm_notifiers);
 static struct pm_state_info z_power_states[CONFIG_MP_NUM_CPUS];
 /* bitmask to check if a power state was forced. */
@@ -56,13 +56,13 @@ static int pm_suspend_devices(void)
 		 * ignore busy devices, wake up source and devices with
 		 * runtime PM enabled.
 		 */
-		if (pm_device_is_busy(dev) ||
-		    pm_device_wakeup_is_enabled(dev) ||
+		if (pm_device_is_busy(dev) || pm_device_state_is_locked(dev)
+		    || pm_device_wakeup_is_enabled(dev) ||
 		    ((dev->pm != NULL) && pm_device_runtime_is_enabled(dev))) {
 			continue;
 		}
 
-		ret = pm_device_state_set(dev, PM_DEVICE_STATE_SUSPENDED);
+		ret = pm_device_action_run(dev, PM_DEVICE_ACTION_SUSPEND);
 		/* ignore devices not supporting or already at the given state */
 		if ((ret == -ENOSYS) || (ret == -ENOTSUP) || (ret == -EALREADY)) {
 			continue;
@@ -84,8 +84,8 @@ static int pm_suspend_devices(void)
 static void pm_resume_devices(void)
 {
 	for (int i = (num_susp - 1); i >= 0; i--) {
-		pm_device_state_set(__pm_device_slots_start[i],
-				    PM_DEVICE_STATE_ACTIVE);
+		pm_device_action_run(__pm_device_slots_start[i],
+				    PM_DEVICE_ACTION_RESUME);
 	}
 
 	num_susp = 0;
@@ -148,6 +148,8 @@ static inline void pm_state_notify(bool entering_state)
 
 void pm_system_resume(void)
 {
+	uint8_t id = _current_cpu->id;
+
 	/*
 	 * This notification is called from the ISR of the event
 	 * that caused exit from kernel idling after PM operations.
@@ -159,14 +161,8 @@ void pm_system_resume(void)
 	 * For such CPU LPS states, do post operations and restores here.
 	 * The kernel scheduler will get control after the ISR finishes
 	 * and it may schedule another thread.
-	 *
-	 * Call pm_idle_exit_notification_disable() if this
-	 * notification is not required.
 	 */
-	if (!post_ops_done) {
-		uint8_t id = _current_cpu->id;
-
-		post_ops_done = true;
+	if (atomic_test_and_clear_bit(z_post_ops_required, id)) {
 		exit_pos_ops(z_power_states[id]);
 		pm_state_notify(false);
 		z_power_states[id] = (struct pm_state_info){PM_STATE_ACTIVE,
@@ -208,17 +204,8 @@ bool pm_system_suspend(int32_t ticks)
 		ret = false;
 		goto end;
 	}
-	post_ops_done = false;
 
 	if (ticks != K_TICKS_FOREVER) {
-		/*
-		 * Just a sanity check in case the policy manager does not
-		 * handle this error condition properly.
-		 */
-		__ASSERT(z_power_states[id].min_residency_us >=
-			z_power_states[id].exit_latency_us,
-			"min_residency_us < exit_latency_us");
-
 		/*
 		 * We need to set the timer to interrupt a little bit early to
 		 * accommodate the time required by the CPU to fully wake up.
@@ -237,7 +224,7 @@ bool pm_system_suspend(int32_t ticks)
 			z_power_states[id].state = PM_STATE_ACTIVE;
 			(void)atomic_add(&z_cpus_active, 1);
 			SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks,
-				_handle_device_abort(z_power_states[id]));
+						   z_power_states[id].state);
 			ret = false;
 			goto end;
 		}
@@ -256,6 +243,7 @@ bool pm_system_suspend(int32_t ticks)
 	pm_stats_start();
 	/* Enter power state */
 	pm_state_notify(true);
+	atomic_set_bit(z_post_ops_required, id);
 	pm_state_set(z_power_states[id]);
 	pm_stats_stop();
 
@@ -298,7 +286,7 @@ int pm_notifier_unregister(struct pm_notifier *notifier)
 	return ret;
 }
 
-const struct pm_state_info pm_power_state_next_get(uint8_t cpu)
+struct pm_state_info pm_power_state_next_get(uint8_t cpu)
 {
 	return z_power_states[cpu];
 }

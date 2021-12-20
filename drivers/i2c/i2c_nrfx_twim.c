@@ -7,6 +7,7 @@
 
 #include <drivers/i2c.h>
 #include <dt-bindings/i2c/i2c.h>
+#include <pm/device.h>
 #include <nrfx_twim.h>
 #include <sys/util.h>
 
@@ -371,7 +372,7 @@ static int twim_nrfx_pm_action(const struct device *dev,
 		.flash_buf_max_size = FLASH_BUF_MAX_SIZE(idx),		       \
 	};								       \
 	PM_DEVICE_DT_DEFINE(I2C(idx), twim_nrfx_pm_action);		       \
-	DEVICE_DT_DEFINE(I2C(idx),					       \
+	I2C_DEVICE_DT_DEFINE(I2C(idx),					       \
 		      twim_##idx##_init,				       \
 		      PM_DEVICE_DT_REF(I2C(idx)),			       \
 		      &twim_##idx##_data,				       \

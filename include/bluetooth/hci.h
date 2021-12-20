@@ -1375,6 +1375,9 @@ struct bt_hci_cp_le_set_per_adv_data {
 	uint8_t  data[251];
 } __packed;
 
+#define BT_HCI_LE_SET_PER_ADV_ENABLE_ENABLE     BIT(0)
+#define BT_HCI_LE_SET_PER_ADV_ENABLE_ADI        BIT(1)
+
 #define BT_HCI_OP_LE_SET_PER_ADV_ENABLE         BT_OP(BT_OGF_LE, 0x0040)
 struct bt_hci_cp_le_set_per_adv_enable {
 	uint8_t  enable;
@@ -2670,9 +2673,9 @@ struct bt_hci_evt_le_biginfo_adv_report {
 #define BT_EVT_MASK_LE_ADV_SET_TERMINATED        BT_EVT_BIT(17)
 #define BT_EVT_MASK_LE_SCAN_REQ_RECEIVED         BT_EVT_BIT(18)
 #define BT_EVT_MASK_LE_CHAN_SEL_ALGO             BT_EVT_BIT(19)
-#define BT_EVT_MASK_LE_CONNECTIONLESS_IQ_REPORT  BT_EVT_BIT(21)
-#define BT_EVT_MASK_LE_CONNECTION_IQ_REPORT      BT_EVT_BIT(22)
-#define BT_EVT_MASK_LE_CTE_REQUEST_FAILED        BT_EVT_BIT(23)
+#define BT_EVT_MASK_LE_CONNECTIONLESS_IQ_REPORT  BT_EVT_BIT(20)
+#define BT_EVT_MASK_LE_CONNECTION_IQ_REPORT      BT_EVT_BIT(21)
+#define BT_EVT_MASK_LE_CTE_REQUEST_FAILED        BT_EVT_BIT(22)
 #define BT_EVT_MASK_LE_PAST_RECEIVED             BT_EVT_BIT(23)
 #define BT_EVT_MASK_LE_CIS_ESTABLISHED           BT_EVT_BIT(24)
 #define BT_EVT_MASK_LE_CIS_REQ                   BT_EVT_BIT(25)

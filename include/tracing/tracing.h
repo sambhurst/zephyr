@@ -8,6 +8,8 @@
 
 #include <kernel.h>
 
+#include "tracking.h"
+
 #if defined CONFIG_SEGGER_SYSTEMVIEW
 #include "tracing_sysview.h"
 #elif defined CONFIG_TRACING_CTF
@@ -1153,7 +1155,7 @@ void sys_trace_idle(void);
  * @param head First ll-node
  * @param tail Last ll-node
  */
-#define sys_port_trace_k_fifo_alloc_put_list_enter(fifo, head, tail)
+#define sys_port_trace_k_fifo_put_list_enter(fifo, head, tail)
 
 /**
  * @brief Trace FIFO Queue put list exit
@@ -1161,7 +1163,7 @@ void sys_trace_idle(void);
  * @param head First ll-node
  * @param tail Last ll-node
  */
-#define sys_port_trace_k_fifo_alloc_put_list_exit(fifo, head, tail)
+#define sys_port_trace_k_fifo_put_list_exit(fifo, head, tail)
 
 /**
  * @brief Trace FIFO Queue put slist entry
@@ -1983,8 +1985,9 @@ void sys_trace_idle(void);
 /**
  * @brief Trace enabling device runtime PM call exit.
  * @param dev Device instance.
+ * @param ret Return value.
  */
-#define sys_port_trace_pm_device_runtime_enable_exit(dev)
+#define sys_port_trace_pm_device_runtime_enable_exit(dev, ret)
 
 /**
  * @brief Trace disabling device runtime PM call entry.

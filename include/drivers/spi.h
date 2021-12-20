@@ -248,7 +248,7 @@ struct spi_cs_control {
  *     cs_hold             [ 12 ]      - Hold on the CS line if possible.
  *     lock_on             [ 13 ]      - Keep resource locked for the caller.
  *     cs_active_high      [ 14 ]      - Active high CS logic.
- *     reserved            [ 15 ]      - reserved for future use.
+ *     format              [ 15 ]      - Motorola or TI frame format (optional).
  * if @kconfig{CONFIG_SPI_EXTENDED_MODES} is defined:
  *     lines               [ 16 : 17 ] - MISO lines: Single/Dual/Quad/Octal.
  *     reserved            [ 18 : 31 ] - reserved for future use.

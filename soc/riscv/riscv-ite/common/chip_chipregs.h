@@ -44,6 +44,13 @@
 #define REG_BASE_ADDR				EC_REG_BASE_ADDR
 #endif
 
+/* Common definition */
+/*
+ * EC clock frequency (PWM and tachometer driver need it to reply
+ * to api or calculate RPM)
+ */
+#define EC_FREQ			MHZ(8)
+
 /**
  * (10XXh) Shared Memory Flash Interface Bridge (SMFI)
  */
@@ -538,43 +545,6 @@
 #define GPCR_PORT_PIN_MODE_PULLUP   BIT(2)
 #define GPCR_PORT_PIN_MODE_PULLDOWN BIT(1)
 
-/**
- *
- * (17XXh) PS/2 Interface Register
- *
- */
-#define PSCTL1			ECREG(EC_REG_BASE_ADDR + 0x1700)
-#define PSCTL2			ECREG(EC_REG_BASE_ADDR + 0x1701)
-#define PSCTL3			ECREG(EC_REG_BASE_ADDR + 0x1702)
-#define PSINT1			ECREG(EC_REG_BASE_ADDR + 0x1704)
-#define PSINT2			ECREG(EC_REG_BASE_ADDR + 0x1705)
-#define PSINT3			ECREG(EC_REG_BASE_ADDR + 0x1706)
-#define PSSTS1			ECREG(EC_REG_BASE_ADDR + 0x1708)
-#define PSSTS2			ECREG(EC_REG_BASE_ADDR + 0x1709)
-#define PSSTS3			ECREG(EC_REG_BASE_ADDR + 0x170A)
-#define PSDAT1			ECREG(EC_REG_BASE_ADDR + 0x170C)
-#define PSDAT2			ECREG(EC_REG_BASE_ADDR + 0x170D)
-#define PSDAT3			ECREG(EC_REG_BASE_ADDR + 0x170E)
-
-/* PS/2 Control Register */
-#define DCEN			BIT(4)
-#define TRMS			BIT(3)
-#define PSHE			BIT(2)
-#define CCLK			BIT(1)
-#define CDAT			BIT(0)
-
-/* PS/2 Interrupt Control Register */
-#define TDIE			BIT(2)
-#define SIE			BIT(1)
-#define SMIE			BIT(0)
-
-/* PS/2 Status Register */
-#define FER			BIT(5)
-#define PER			BIT(4)
-#define TDS			BIT(3)
-#define SS			BIT(2)
-#define CLS			BIT(1)
-#define DLS			BIT(0)
 
 /*
  * IT8XXX2 register structure size/offset checking macro function to mitigate
@@ -640,6 +610,11 @@ struct pwm_it8xxx2_regs {
 /* PWM register fields */
 /* 0x023: PWM Clock Control */
 #define IT8XXX2_PWM_PCCE		BIT(1)
+/* 0x048: Tachometer Switch Control */
+#define IT8XXX2_PWM_T0DVS		BIT(3)
+#define IT8XXX2_PWM_T0CHSEL		BIT(2)
+#define IT8XXX2_PWM_T1DVS		BIT(1)
+#define IT8XXX2_PWM_T1CHSEL		BIT(0)
 
 /**
  *
@@ -2291,6 +2266,32 @@ struct espi_vw_regs {
 	/* 0x98-0x99: Reserved3 */
 	volatile uint8_t reserved3[2];
 };
+
+#define ESPI_IT8XXX2_OOB_MAX_PAYLOAD_SIZE 80
+/*
+ * eSPI Queue 0 registers
+ */
+struct espi_queue0_regs {
+	/* 0x00-0x3f: PUT_PC Data Byte 0-63 */
+	volatile uint8_t PUT_PC_DATA[0x40];
+	/* 0x40-0x7f: Reserved1 */
+	volatile uint8_t reserved1[0x40];
+	/* 0x80-0xcf: PUT_OOB Data Byte 0-79 */
+	volatile uint8_t PUT_OOB_DATA[ESPI_IT8XXX2_OOB_MAX_PAYLOAD_SIZE];
+};
+
+/*
+ * eSPI Queue 1 registers
+ */
+struct espi_queue1_regs {
+	/* 0x00-0x4f: Upstream Data Byte 0-79 */
+	volatile uint8_t UPSTREAM_DATA[ESPI_IT8XXX2_OOB_MAX_PAYLOAD_SIZE];
+	/* 0x50-0x7f: Reserved1 */
+	volatile uint8_t reserved1[0x30];
+	/* 0x80-0xbf: PUT_FLASH_NP Data Byte 0-63 */
+	volatile uint8_t PUT_FLASH_NP_DATA[0x40];
+};
+
 #endif /* !__ASSEMBLER__ */
 
 #endif /* CHIP_CHIPREGS_H */

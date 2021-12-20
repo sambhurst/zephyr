@@ -236,33 +236,6 @@
 						((enc) ? (PDU_MIC_SIZE) : 0), \
 						(phy), (s8))
 
-/* TODO: verify if the following lines are correct */
-/* Extra bytes for enqueued node_rx metadata: rssi (always), resolving
- * index, directed adv report, and mesh channel and instant.
- */
-#define PDU_AC_SIZE_RSSI 1
-#if defined(CONFIG_BT_CTLR_PRIVACY)
-#define PDU_AC_SIZE_PRIV 1
-#else
-#define PDU_AC_SIZE_PRIV 0
-#endif /* CONFIG_BT_CTLR_PRIVACY */
-#if defined(CONFIG_BT_CTLR_EXT_SCAN_FP)
-#define PDU_AC_SIZE_SCFP 1
-#else
-#define PDU_AC_SIZE_SCFP 0
-#endif /* CONFIG_BT_CTLR_EXT_SCAN_FP */
-#if defined(CONFIG_BT_HCI_MESH_EXT)
-#define PDU_AC_SIZE_MESH 5
-#else
-#define PDU_AC_SIZE_MESH 0
-#endif /* CONFIG_BT_HCI_MESH_EXT */
-
-#define PDU_AC_LL_SIZE_EXTRA (PDU_AC_SIZE_RSSI + \
-			      PDU_AC_SIZE_PRIV + \
-			      PDU_AC_SIZE_SCFP + \
-			      PDU_AC_SIZE_MESH)
-
-
 struct pdu_adv_adv_ind {
 	uint8_t addr[BDADDR_SIZE];
 	uint8_t data[PDU_AC_DATA_SIZE_MAX];
@@ -867,6 +840,52 @@ struct pdu_data {
 		struct profile         profile;
 #endif /* CONFIG_BT_CTLR_PROFILE_ISR */
 	} __packed;
+} __packed;
+
+/* Generic ISO pdu, could be CIS or BIS
+ * To be used when reffering to component withouth knowing CIS or BIS type
+ */
+struct pdu_iso {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	uint8_t ll_id:2;
+	uint8_t hdr_other:6;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+	uint8_t hdr_other:6;
+	uint8_t ll_id:2;
+#else
+#error "Unsupported endianness"
+#endif /* __BYTE_ORDER__ */
+	uint8_t length;
+	uint8_t payload[0];
+} __packed;
+
+/* ISO SDU segmentation header */
+#define PDU_ISO_SEG_HDR_SIZE 2
+#define PDU_ISO_SEG_TIMEOFFSET_SIZE 3
+
+struct pdu_iso_sdu_sh {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	uint8_t sc:1;
+	uint8_t cmplt:1;
+	uint8_t rfu:6;
+
+	uint8_t length;
+	/* Note, timeoffset only available in first segment of sdu */
+	uint32_t timeoffset:24;
+	uint32_t payload:8;
+
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+	uint8_t rfu:6;
+	uint8_t cmplt:1;
+	uint8_t sc:1;
+
+	uint8_t length;
+	/* Note, timeoffset only available in first segment of sdu */
+	uint32_t payload:8;
+	uint32_t timeoffset:24;
+#else
+#error "Unsupported endianness"
+#endif /* __BYTE_ORDER__ */
 } __packed;
 
 struct pdu_cis {

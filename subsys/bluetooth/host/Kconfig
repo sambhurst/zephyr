@@ -151,14 +151,11 @@ config BT_SETTINGS_CCC_LAZY_LOADING
 config BT_SETTINGS_CCC_STORE_ON_WRITE
 	bool "Store CCC value immediately after it has been written"
 	depends on BT_CONN
+	default y
 	help
 	  Store Client Configuration Characteristic value right after it has
-	  been updated.
-
-	  By default, CCC is only stored on disconnection.
-	  Choosing this option is safer for battery-powered devices or devices
-	  that expect to be reset suddenly. However, it requires additional
-	  workqueue stack space.
+	  been updated. If the option is disabled, the CCC is only stored on
+	  disconnection.
 
 config BT_SETTINGS_USE_PRINTK
 	bool "Use snprintk to encode Bluetooth settings key strings"
@@ -609,6 +606,17 @@ config BT_HOST_CCM
 	  Enables the software based AES-CCM engine in the host. Will use the
 	  controller's AES encryption functions if available, or BT_HOST_CRYPTO
 	  otherwise.
+
+config BT_PER_ADV_SYNC_BUF_SIZE
+	int "Maximum periodic advertising report size"
+	depends on BT_PER_ADV_SYNC
+	range 0 1650
+	default 0
+	help
+	  Maximum size of a fragmented periodic advertising report. If the periodic
+	  advertising report provided by the controller is fragmented and larger
+	  than this buffer size, then the data will be discarded.
+	  Unfragmented reports are forwarded as they are received.
 
 if BT_DEBUG
 config BT_DEBUG_SETTINGS
