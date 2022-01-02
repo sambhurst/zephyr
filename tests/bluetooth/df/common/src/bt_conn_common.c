@@ -23,7 +23,7 @@
 
 #define PEER_FEATURES_ARE_VALID 1U
 
-uint16_t common_create_connection(void)
+uint16_t ut_bt_create_connection(void)
 {
 	struct ll_conn *conn;
 
@@ -36,7 +36,7 @@ uint16_t common_create_connection(void)
 	return conn->lll.handle;
 }
 
-void common_destroy_connection(uint16_t handle)
+void ut_bt_destroy_connection(uint16_t handle)
 {
 	struct ll_conn *conn;
 
@@ -46,7 +46,7 @@ void common_destroy_connection(uint16_t handle)
 	ll_conn_release(conn);
 }
 
-void common_set_peer_features(uint16_t conn_handle, uint64_t features)
+void ut_bt_set_peer_features(uint16_t conn_handle, uint64_t features)
 {
 	struct ll_conn *conn;
 
@@ -57,7 +57,7 @@ void common_set_peer_features(uint16_t conn_handle, uint64_t features)
 	conn->llcp_feature.features_peer = features;
 }
 
-void common_set_periph_latency(uint16_t conn_handle, uint16_t periph_latency)
+void ut_bt_set_periph_latency(uint16_t conn_handle, uint16_t periph_latency)
 {
 	struct ll_conn *conn;
 

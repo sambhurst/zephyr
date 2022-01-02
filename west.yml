@@ -37,7 +37,7 @@ manifest:
       groups:
         - hal
     - name: edtt
-      revision: 31badfbbd04f2948e3df6ebf329f930317550961
+      revision: c94f63865a803b18a2ab9eca70d2a9ab881130f6
       path: tools/edtt
       groups:
         - tools
@@ -88,7 +88,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: f6b23344f6bdfb490ac7d038344174a99fa75d45
+      revision: a42b016d7c7610489f5f8c79773fedc05ba352ee
       path: modules/hal/nordic
       groups:
         - hal
@@ -168,7 +168,7 @@ manifest:
       groups:
         - crypto
     - name: mcuboot
-      revision: 33906b472a6c0ed4e2ca3520eb4eed1db40c6018
+      revision: 399720d1cabd26c4356445d351f263b31e942961
       path: bootloader/mcuboot
     - name: mipi-sys-t
       path: modules/debug/mipi-sys-t

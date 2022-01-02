@@ -163,7 +163,7 @@ static int prepare_cb(struct lll_prepare_param *p)
 	/* Start setting up of Radio h/w */
 	radio_reset();
 #if defined(CONFIG_BT_CTLR_TX_PWR_DYNAMIC_CONTROL)
-	radio_tx_power_set(lll->tx_pwr_lvl);
+	radio_tx_power_set(lll->adv->tx_pwr_lvl);
 #else
 	radio_tx_power_set(RADIO_TXP_DEFAULT);
 #endif
@@ -172,7 +172,8 @@ static int prepare_cb(struct lll_prepare_param *p)
 
 	/* TODO: if coded we use S8? */
 	radio_phy_set(phy_s, lll->adv->phy_flags);
-	radio_pkt_configure(8, PDU_AC_PAYLOAD_SIZE_MAX, (phy_s << 1));
+	radio_pkt_configure(RADIO_PKT_CONF_LENGTH_8BIT, PDU_AC_PAYLOAD_SIZE_MAX,
+			    RADIO_PKT_CONF_PHY(phy_s));
 	radio_aa_set(lll->access_addr);
 	radio_crc_configure(PDU_CRC_POLYNOMIAL,
 				sys_get_le24(lll->crc_init));
@@ -353,7 +354,7 @@ static void isr_tx(void *param)
 		radio_isr_set(isr_tx, lll_sync);
 		switch_radio_complete_and_b2b_tx(lll_sync, lll->phy_s);
 	} else {
-		radio_isr_set(isr_done, lll);
+		radio_isr_set(isr_done, lll_sync);
 		switch_radio_complete_and_phy_end_disable(lll_sync);
 	}
 

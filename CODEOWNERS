@@ -91,6 +91,7 @@
 /boards/arm/96b_stm32_sensor_mez/         @Mani-Sadhasivam
 /boards/arm/96b_wistrio/                  @Mani-Sadhasivam
 /boards/arm/arduino_due/                  @ioannisg
+/boards/arm/bbc_microbit_v2/              @LingaoM
 /boards/arm/blackpill_f401ce/             @coderkalyan
 /boards/arm/blackpill_f411ce/             @coderkalyan
 /boards/arm/cc1352r1_launchxl/            @bwitherspoon
@@ -568,6 +569,7 @@
 /include/net/coap*.h                      @rlubos
 /include/net/lwm2m*.h                     @rlubos
 /include/net/mqtt.h                       @rlubos
+/include/net/net_pkt_filter.h             @npitre
 /include/posix/                           @pfalcon
 /include/pm/pm.h                          @nashif @ceolin
 /include/drivers/ptp_clock.h              @tbursztyka
@@ -701,6 +703,7 @@
 /subsys/lorawan/                          @Mani-Sadhasivam
 /subsys/mgmt/ec_host_cmd/                 @jettr
 /subsys/mgmt/mcumgr/                      @carlescufi @nvlsianpu
+/subsys/mgmt/mcumgr/lib/                  @de-nordic
 /subsys/mgmt/hawkbit/                     @Navin-Sankar
 /subsys/mgmt/mcumgr/smp_udp.c             @aunsbjerg
 /subsys/mgmt/updatehub/                   @nandojve @otavio
@@ -719,6 +722,7 @@
 /subsys/net/lib/tls_credentials/          @rlubos
 /subsys/net/l2/                           @rlubos @tbursztyka
 /subsys/net/l2/canbus/                    @alexanderwachter
+/subsys/net/pkt_filter/                   @npitre
 /subsys/net/*/openthread/                 @rlubos
 /subsys/pm/                               @nashif @ceolin
 /subsys/random/                           @dleach02
@@ -728,6 +732,7 @@
 /subsys/storage/                          @nvlsianpu
 /subsys/task_wdt/                         @martinjaeger
 /subsys/testsuite/                        @nashif
+/subsys/testsuite/ztest/*/ztress*         @nordic-krch
 /subsys/timing/                           @nashif @dcpleung
 /subsys/usb/                              @jfischer-no
 /subsys/usb/class/dfu/usb_dfu.c           @nvlsianpu
@@ -760,6 +765,7 @@
 /tests/net/lib/http_header_fields/        @rlubos @tbursztyka
 /tests/net/lib/mqtt_packet/               @rlubos
 /tests/net/lib/coap/                      @rlubos
+/tests/net/npf/                           @npitre
 /tests/net/socket/socketpair/             @cfriedt
 /tests/net/socket/                        @rlubos @tbursztyka @pfalcon
 /tests/subsys/debug/coredump/             @dcpleung

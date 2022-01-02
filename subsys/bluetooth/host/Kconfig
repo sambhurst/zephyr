@@ -248,15 +248,7 @@ config BT_REMOTE_INFO
 	  Enable application access to the remote information available in the
 	  stack. The remote information is retrieved once a connection has been
 	  established and the application will be notified when this information
-	  is available through the remote_version_available connection callback.
-
-config BT_REMOTE_VERSION
-	bool "Enable remote version information"
-	depends on BT_REMOTE_INFO
-	help
-	  Enable this to get access to the remote version through
-	  the remote_version_available callback. The host will automatically ask
-	  the remote device after the connection has been established.
+	  is available through the remote_info_available connection callback.
 
 config BT_SMP
 	bool "Security Manager Protocol support"
@@ -554,26 +546,39 @@ config BT_DF
 	  It will allow to: get information about antennae, configure
 	  Constant Tone Extension, transmit CTE and sample incoming CTE.
 
+if BT_DF
+
 config BT_DF_CONNECTIONLESS_CTE_RX
 	bool "Enable support for receive of CTE in connectionless mode"
-	depends on BT_DF
 	help
 	  Enable support for reception and sampling of Constant Tone Extension
 	  in connectionless mode.
 
 config BT_DF_CONNECTION_CTE_RX
 	bool "Enable support for receive of CTE in connection mode"
-	depends on BT_DF
 	help
 	  Enable support for reception and sampling of Constant Tone Extension
 	  in connection mode.
 
+config BT_DF_CONNECTION_CTE_TX
+	bool "Enable support for transmission of CTE in connection mode"
+	help
+	  Enable support for transmission of Constant Tone Extension in
+	  connection mode.
+
+config BT_DF_CONNECTION_CTE_RSP
+	bool "Enable support for CTE request procedure in connection mode"
+	depends on BT_DF_CONNECTION_CTE_TX
+	help
+	  Enable support for request of Constant Tone Extension in connection
+	  mode.
+
 config BT_DEBUG_DF
 	bool "Bluetooth Direction Finding debug"
-	depends on BT_DF
 	help
 	  This option enables debug support for Bluetooth Direction Finding
 
+endif # BT_DF
 endif # BT_HCI_HOST
 
 config BT_ECC
