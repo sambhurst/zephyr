@@ -388,12 +388,31 @@ config SCHED_THREAD_USAGE
 	help
 	  Collect thread runtime info at context switch time
 
+config SCHED_THREAD_USAGE_ANALYSIS
+	bool "Analyze the collected thread runtime usage statistics"
+	default n
+	depends on SCHED_THREAD_USAGE
+	select INSTRUMENT_THREAD_SWITCHING if !USE_SWITCH
+	help
+	  Collect additional timing information related to thread scheduling
+	  for analysis purposes. This includes the total time that a thread
+	  has been scheduled, the longest time for which it was scheduled and
+	  others.
+
 config SCHED_THREAD_USAGE_ALL
 	bool "Collect total system runtime usage"
 	default y if SCHED_THREAD_USAGE
 	depends on SCHED_THREAD_USAGE
 	help
 	  Maintain a sum of all non-idle thread cycle usage.
+
+config SCHED_THREAD_USAGE_AUTO_ENABLE
+	bool "Automatically enable runtime usage statistics"
+	default y
+	depends on SCHED_THREAD_USAGE
+	help
+	  When set, this option automatically enables the gathering of both
+	  the thread and CPU usage statistics.
 
 endif # THREAD_RUNTIME_STATS
 
@@ -509,17 +528,6 @@ config NUM_MBOX_ASYNC_MSGS
 
 	  Setting this option to 0 disables support for asynchronous
 	  mailbox messages.
-
-config NUM_PIPE_ASYNC_MSGS
-	int "Maximum number of in-flight asynchronous pipe messages"
-	default 10
-	help
-	  This option specifies the total number of asynchronous pipe
-	  messages that can exist simultaneously, across all pipes in
-	  the system.
-
-	  Setting this option to 0 disables support for asynchronous
-	  pipe messages.
 
 config EVENTS
 	bool "Enable event objects"

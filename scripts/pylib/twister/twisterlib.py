@@ -2139,7 +2139,7 @@ class CMake():
         if self.warnings_as_errors:
             ldflags = "-Wl,--fatal-warnings"
             cflags = "-Werror"
-            aflags = "-Wa,--fatal-warnings"
+            aflags = "-Werror -Wa,--fatal-warnings"
             gen_defines_args = "--edtlib-Werror"
         else:
             ldflags = cflags = aflags = ""
@@ -2149,9 +2149,9 @@ class CMake():
         cmake_args = [
             f'-B{self.build_dir}',
             f'-S{self.source_dir}',
-            f'-DEXTRA_CFLAGS="{cflags}"',
-            f'-DEXTRA_AFLAGS="{aflags}',
-            f'-DEXTRA_LDFLAGS="{ldflags}"',
+            f'-DEXTRA_CFLAGS={cflags}',
+            f'-DEXTRA_AFLAGS={aflags}',
+            f'-DEXTRA_LDFLAGS={ldflags}',
             f'-DEXTRA_GEN_DEFINES_ARGS={gen_defines_args}',
             f'-G{self.generator}'
         ]
@@ -3830,11 +3830,13 @@ class TestSuite(DisablePyTestCollectionMixin):
                     if rom_size:
                         testcase["rom_size"] = rom_size
 
-                    if instance.results[k] in ["PASS"] or instance.status == 'passed':
+                    if instance.results[k] in ["SKIP"] or instance.status == 'skipped':
+                        testcase["status"] = "skipped"
+                        testcase["reason"] = instance.reason
+                    elif instance.results[k] in ["PASS"] or instance.status == 'passed':
                         testcase["status"] = "passed"
                         if instance.handler:
                             testcase["execution_time"] =  handler_time
-
                     elif instance.results[k] in ['FAIL', 'BLOCK'] or instance.status in ["error", "failed", "timeout", "flash_error"]:
                         testcase["status"] = "failed"
                         testcase["reason"] = instance.reason
@@ -3845,9 +3847,6 @@ class TestSuite(DisablePyTestCollectionMixin):
                             testcase["device_log"] = self.process_log(device_log)
                         else:
                             testcase["build_log"] = self.process_log(build_log)
-                    elif instance.status == 'skipped':
-                        testcase["status"] = "skipped"
-                        testcase["reason"] = instance.reason
                     testcases.append(testcase)
 
         suites = [ {"testcases": testcases} ]
@@ -3868,13 +3867,14 @@ class TestSuite(DisablePyTestCollectionMixin):
         """
         Verify if platform name (passed by --platform option, or in yaml file
         as platform_allow or integration_platforms options) is correct. If not -
-        log error.
+        log and raise error.
         """
         for platform in platform_names_to_verify:
             if platform in self.platform_names:
                 break
             else:
                 logger.error(f"{log_info} - unrecognized platform - {platform}")
+                sys.exit(2)
 
 
 class CoverageTool:

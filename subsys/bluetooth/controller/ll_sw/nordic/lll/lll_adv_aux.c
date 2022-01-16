@@ -19,6 +19,7 @@
 #include "util/util.h"
 #include "util/mem.h"
 #include "util/memq.h"
+#include "util/dbuf.h"
 
 #include "pdu.h"
 
@@ -26,7 +27,7 @@
 #include "lll_vendor.h"
 #include "lll_clock.h"
 #include "lll_chan.h"
-#include "lll/lll_df_types.h"
+#include "lll_df_types.h"
 #include "lll_conn.h"
 #include "lll_adv_types.h"
 #include "lll_adv.h"

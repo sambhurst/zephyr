@@ -70,58 +70,23 @@
 #define __imr __in_section_unique(imr)
 #define __imrdata __in_section_unique(imrdata)
 
+extern void soc_trace_init(void);
 extern void z_soc_irq_enable(uint32_t irq);
 extern void z_soc_irq_disable(uint32_t irq);
 extern int z_soc_irq_is_enabled(unsigned int irq);
 
-/* Legacy SOC-level API still used in a few drivers */
+extern void z_soc_mp_asm_entry(void);
+extern void soc_mp_startup(uint32_t cpu);
+extern void soc_start_core(int cpu_num);
+
+extern bool soc_cpus_active[CONFIG_MP_NUM_CPUS];
+
+/* Legacy cache APIs still used in a few places */
 #define SOC_DCACHE_FLUSH(addr, size)		\
 	z_xtensa_cache_flush((addr), (size))
 #define SOC_DCACHE_INVALIDATE(addr, size)	\
 	z_xtensa_cache_inv((addr), (size))
-
-/**
- * @brief Return uncached pointer to a RAM address
- *
- * The Intel ADSP architecture maps all addressable RAM (of all types)
- * twice, in two different 512MB segments regions whose L1 cache
- * settings can be controlled independently.  So for any given
- * pointer, it is possible to convert it to and from a cached version.
- *
- * This function takes a pointer to any addressible object (either in
- * cacheable memory or not) and returns a pointer that can be used to
- * refer to the same memory while bypassing the L1 data cache.  Data
- * in the L1 cache will not be inspected nor modified by the access.
- *
- * @see z_soc_cached_ptr()
- *
- * @param p A pointer to a valid C object
- * @return A pointer to the same object bypassing the L1 dcache
- */
-static inline void *z_soc_uncached_ptr(void *p)
-{
-	return ((void *)(((size_t)p) & ~0x20000000));
-}
-
-/**
- * @brief Return cached pointer to a RAM address
- *
- * This function takes a pointer to any addressible object (either in
- * cacheable memory or not) and returns a pointer that can be used to
- * refer to the same memory through the L1 data cache.  Data read
- * through the resulting pointer will reflect locally cached values on
- * the current CPU if they exist, and writes will go first into the
- * cache and be written back later.
- *
- * @see z_soc_uncached_ptr()
- *
- * @param p A pointer to a valid C object
- * @return A pointer to the same object via the L1 dcache
-
- */
-static inline void *z_soc_cached_ptr(void *p)
-{
-	return ((void *)(((size_t)p) | 0x20000000));
-}
+#define z_soc_cached_ptr(p) arch_xtensa_cached_ptr(p)
+#define z_soc_uncached_ptr(p) arch_xtensa_uncached_ptr(p)
 
 #endif /* __INC_SOC_H */

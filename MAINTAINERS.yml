@@ -450,6 +450,7 @@ Documentation:
         - lgirdwood
         - mengxianglinx
         - marc-hb
+        - kv2019i
     files:
         - drivers/audio/
         - include/audio/
@@ -581,7 +582,7 @@ Documentation:
       - albertofloyd
     collaborators:
       - VenkatKotakonda
-      - scottwcpg
+      - jvasanth1
     files:
         - drivers/espi/
         - include/drivers/espi.h
@@ -853,6 +854,7 @@ Documentation:
         - include/drivers/uart.h
         - include/drivers/uart/
         - dts/bindings/serial/
+        - samples/drivers/uart/
         - tests/drivers/uart/
     labels:
         - "area: UART"
@@ -1396,6 +1398,7 @@ GD32 Platforms:
         - soburi
     files:
         - boards/arm/gd32*/
+        - boards/riscv/gd32*/
         - boards/riscv/longan_nano/
         - drivers/*/*gd32*/
         - drivers/*/*gd32*
@@ -1496,6 +1499,11 @@ Intel Platforms (Xtensa):
     collaborators:
         - andyross
         - dcpleung
+        - lyakh
+        - lgirdwood
+        - mengxianglinx
+        - marc-hb
+        - kv2019i
     files:
         - boards/xtensa/intel_*/
         - soc/xtensa/intel_*/
@@ -1527,7 +1535,7 @@ NXP Platforms:
 Microchip Platforms:
   status: maintained
   maintainers:
-    - scottwcpg
+    - jvasanth1
   collaborators:
     - VenkatKotakonda
     - albertofloyd

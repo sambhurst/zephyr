@@ -41,8 +41,6 @@ static bool is_hci_event_discardable(const uint8_t *evt_data)
 		switch (subevt_type) {
 		case BT_HCI_EVT_LE_ADVERTISING_REPORT:
 			return true;
-		case BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT:
-			return true;
 		default:
 			return false;
 		}
@@ -93,7 +91,7 @@ static struct net_buf *bt_esp_evt_recv(uint8_t *data, size_t remaining)
 		BT_ERR("Not enough space in buffer %zu/%zu",
 		       remaining, buf_tailroom);
 		net_buf_unref(buf);
-		continue;
+		return NULL;
 	}
 
 	net_buf_add_mem(buf, data, remaining);

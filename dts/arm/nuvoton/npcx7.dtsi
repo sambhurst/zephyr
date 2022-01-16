@@ -68,7 +68,7 @@
 			reg-names = "evt_itim", "sys_itim";
 			clocks = <&pcc NPCX_CLOCK_BUS_LFCLK NPCX_PWDWN_CTL4 3
 				  &pcc NPCX_CLOCK_BUS_APB2 NPCX_PWDWN_CTL7 5>;
-			interrupts = <46 2>; /* Event timer interrupt */
+			interrupts = <46 1>; /* Event timer interrupt */
 			label = "ITIM";
 		};
 
@@ -197,6 +197,7 @@
 				     &altf_adc7_sl   /* ADC7 - PINE1 */
 				     &altf_adc8_sl   /* ADC8 - PINF1 */
 				     &altf_adc9_sl>; /* ADC9 - PINF0 */
+			threshold-reg-offset = <0x14>;
 		};
 	};
 

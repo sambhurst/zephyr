@@ -16,6 +16,7 @@
 
 #include "util/util.h"
 #include "util/memq.h"
+#include "util/dbuf.h"
 
 #include "pdu.h"
 
@@ -169,16 +170,12 @@ void lll_sync_aux_prepare_cb(struct lll_sync *lll,
 	cfg = lll_df_sync_cfg_latest_get(&lll->df_cfg, NULL);
 
 	if (cfg->is_enabled) {
-		lll_df_conf_cte_rx_enable(cfg->slot_durations, cfg->ant_sw_len,
-					  cfg->ant_ids, lll_aux->chan);
+		lll_df_conf_cte_rx_enable(cfg->slot_durations, cfg->ant_sw_len, cfg->ant_ids,
+					  lll_aux->chan, CTE_INFO_IN_PAYLOAD);
 		cfg->cte_count = 0;
-
-		radio_switch_complete_and_phy_end_disable();
-	} else
-#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
-	{
-		radio_switch_complete_and_disable();
 	}
+#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
+	radio_switch_complete_and_disable();
 }
 
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC_CTE_TYPE_FILTERING)
@@ -275,19 +272,21 @@ static int create_prepare_cb(struct lll_prepare_param *p)
 	struct lll_df_sync_cfg *cfg;
 
 	cfg = lll_df_sync_cfg_latest_get(&lll->df_cfg, NULL);
-
-	if (cfg->is_enabled) {
-		lll_df_conf_cte_rx_enable(cfg->slot_durations, cfg->ant_sw_len, cfg->ant_ids,
-					  chan_idx);
-		cfg->cte_count = 0;
-
-		radio_switch_complete_and_phy_end_disable();
-	} else
 #endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
-	{
+
+	if (false) {
+#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX)
+	} else if (cfg->is_enabled) {
+
+		lll_df_conf_cte_rx_enable(cfg->slot_durations, cfg->ant_sw_len, cfg->ant_ids,
+					  chan_idx, CTE_INFO_IN_PAYLOAD);
+		cfg->cte_count = 0;
+#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
+	} else if (IS_ENABLED(CONFIG_BT_CTLR_DF_SUPPORT)) {
 		radio_df_cte_inline_set_enabled(false);
-		radio_switch_complete_and_disable();
 	}
+
+	radio_switch_complete_and_disable();
 
 	/* RSSI enable must be called after radio_switch_XXX function because it clears
 	 * RADIO->SHORTS register, thus disables all other shortcuts.
@@ -339,15 +338,12 @@ static int prepare_cb(struct lll_prepare_param *p)
 
 	if (cfg->is_enabled) {
 		lll_df_conf_cte_rx_enable(cfg->slot_durations, cfg->ant_sw_len, cfg->ant_ids,
-					  chan_idx);
+					  chan_idx, CTE_INFO_IN_PAYLOAD);
 		cfg->cte_count = 0;
-
-		radio_switch_complete_and_phy_end_disable();
-	} else
-#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
-	{
-		radio_switch_complete_and_disable();
 	}
+#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
+
+	radio_switch_complete_and_disable();
 
 	/* RSSI enable must be called after radio_switch_XXX function because it clears
 	 * RADIO->SHORTS register, thus disables all other shortcuts.
@@ -547,14 +543,10 @@ static void isr_aux_setup(void *param)
 
 	if (cfg->is_enabled && is_max_cte_reached(cfg->max_cte_count, cfg->cte_count)) {
 		lll_df_conf_cte_rx_enable(cfg->slot_durations, cfg->ant_sw_len, cfg->ant_ids,
-					  aux_ptr->chan_idx);
-
-		radio_switch_complete_and_phy_end_disable();
-	} else
-#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
-	{
-		radio_switch_complete_and_disable();
+					  aux_ptr->chan_idx, CTE_INFO_IN_PAYLOAD);
 	}
+#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
+	radio_switch_complete_and_disable();
 
 	/* Setup radio rx on micro second offset. Note that radio_end_us stores
 	 * PDU start time in this case.
@@ -948,7 +940,7 @@ static inline int create_iq_report(struct lll_sync *lll, uint8_t rssi_ready,
 				ant = radio_df_pdu_antenna_switch_pattern_get();
 				iq_report = ull_df_iq_report_alloc();
 
-				iq_report->hdr.type = NODE_RX_TYPE_IQ_SAMPLE_REPORT;
+				iq_report->hdr.type = NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT;
 				iq_report->sample_count = sample_cnt;
 				iq_report->packet_status = packet_status;
 				iq_report->rssi_ant_id = ant;

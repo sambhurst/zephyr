@@ -10,10 +10,16 @@ zephyr_library_include_directories(include)
 zephyr_library_include_directories(${ZEPHYR_BASE}/drivers)
 
 zephyr_library_sources(soc.c)
-zephyr_library_sources(soc_mp.c)
 zephyr_library_sources(trace_out.c)
 zephyr_library_sources(rimage_modules.c)
 zephyr_library_sources(boot.c)
+
+if(CONFIG_MP_NUM_CPUS GREATER 1)
+  zephyr_library_sources(soc_mp.c)
+  zephyr_library_sources(mp_cavs.c)
+endif()
+
+zephyr_library_sources_ifdef(CONFIG_CAVS_ICTL irq-cavs.c)
 
 zephyr_library_link_libraries(INTEL_ADSP_COMMON)
 
@@ -53,6 +59,7 @@ add_custom_target(
       copy ${CMAKE_BINARY_DIR}/zephyr/${KERNEL_NAME}.elf ${KERNEL_REMAPPED}
 
   COMMAND ${ELF_FIX} ${CMAKE_OBJCOPY} ${KERNEL_REMAPPED}
+      ${CONFIG_XTENSA_CACHED_REGION} ${CONFIG_XTENSA_UNCACHED_REGION}
 
   # Extract modules for rimage
   COMMAND ${CMAKE_OBJCOPY}

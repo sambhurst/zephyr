@@ -351,7 +351,6 @@ include(cmake/extra_flags.cmake)
 zephyr_cc_option(-fno-asynchronous-unwind-tables)
 zephyr_cc_option(-fno-pie)
 zephyr_cc_option(-fno-pic)
-zephyr_cc_option(-fno-strict-overflow)
 
 if(CONFIG_THREAD_LOCAL_STORAGE)
 # Only support local exec TLS model at this point.
@@ -802,6 +801,7 @@ if(CONFIG_HAS_DTS)
     --kernel $<TARGET_FILE:${ZEPHYR_LINK_STAGE_EXECUTABLE}>
     --zephyr-base ${ZEPHYR_BASE}
     --start-symbol "$<TARGET_PROPERTY:linker,devices_start_symbol>"
+    VERBATIM
     DEPENDS ${ZEPHYR_LINK_STAGE_EXECUTABLE}
     )
   set_property(GLOBAL APPEND PROPERTY GENERATED_APP_SOURCE_FILES dev_handles.c)

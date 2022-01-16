@@ -3,6 +3,7 @@
  * Copyright (c) 2019 Song Qiang <songqiang1304521@gmail.com>
  * Copyright (c) 2019 Endre Karlson
  * Copyright (c) 2020 Teslabs Engineering S.L.
+ * Copyright (c) 2021 Marius Scholtz, RIC Electronics
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -262,6 +263,10 @@ struct adc_stm32_cfg {
 	const struct pinctrl_dev_config *pcfg;
 };
 
+#ifdef CONFIG_ADC_STM32_SHARED_IRQS
+static bool init_irq = true;
+#endif
+
 static int check_buffer_size(const struct adc_sequence *sequence,
 			     uint8_t active_channels)
 {
@@ -496,9 +501,10 @@ static int start_read(const struct device *dev,
 		return err;
 	}
 
-#if defined(CONFIG_SOC_SERIES_STM32G0X)
+#if defined(CONFIG_SOC_SERIES_STM32G0X) || \
+	defined(CONFIG_SOC_SERIES_STM32WLX)
 	/*
-	 * Errata: Writing ADC_CFGR1 register while ADEN bit is set
+	 * Writing ADC_CFGR1 register while ADEN bit is set
 	 * resets RES[1:0] bitfield. We need to disable and enable adc.
 	 */
 	if (LL_ADC_IsEnabled(adc) == 1UL) {
@@ -515,7 +521,8 @@ static int start_read(const struct device *dev,
 	LL_ADC_SetResolution(adc, resolution);
 #endif
 
-#ifdef CONFIG_SOC_SERIES_STM32L0X
+#if defined(CONFIG_SOC_SERIES_STM32L0X) || \
+	defined(CONFIG_SOC_SERIES_STM32WLX)
 	/*
 	 * setting OVS bits is conditioned to ADC state: ADC must be disabled
 	 * or enabled without conversion on going : disable it, it will stop
@@ -664,7 +671,7 @@ static void adc_stm32_isr(const struct device *dev)
 
 	adc_context_on_sampling_done(&data->ctx, dev);
 
-	LOG_DBG("ISR triggered.");
+	LOG_DBG("%s ISR triggered.", dev->name);
 }
 
 static int adc_stm32_read(const struct device *dev,
@@ -1046,11 +1053,60 @@ static const struct adc_driver_api api_stm32_driver_api = {
 #endif
 };
 
-#define STM32_ADC_INIT(index)						\
-									\
-static void adc_stm32_cfg_func_##index(void);				\
-									\
-PINCTRL_DT_INST_DEFINE(index);						\
+#ifdef CONFIG_ADC_STM32_SHARED_IRQS
+
+bool adc_stm32_is_irq_active(ADC_TypeDef *adc)
+{
+	return LL_ADC_IsActiveFlag_EOCS(adc) ||
+	       LL_ADC_IsActiveFlag_OVR(adc) ||
+	       LL_ADC_IsActiveFlag_JEOS(adc) ||
+	       LL_ADC_IsActiveFlag_AWD1(adc);
+}
+
+#define HANDLE_IRQS(index)							\
+	static const struct device *dev_##index = DEVICE_DT_INST_GET(index);	\
+	const struct adc_stm32_cfg *cfg_##index = dev_##index->config;		\
+	ADC_TypeDef *adc_##index = (ADC_TypeDef *)(cfg_##index->base);		\
+										\
+	if (adc_stm32_is_irq_active(adc_##index)) {				\
+		adc_stm32_isr(dev_##index);					\
+	}
+
+static void adc_stm32_shared_irq_handler(void)
+{
+	DT_INST_FOREACH_STATUS_OKAY(HANDLE_IRQS);
+}
+
+static void adc_stm32_irq_init(void)
+{
+	if (init_irq) {
+		init_irq = false;
+		IRQ_CONNECT(DT_INST_IRQN(0),
+			DT_INST_IRQ(0, priority),
+			adc_stm32_shared_irq_handler, NULL, 0);
+		irq_enable(DT_INST_IRQN(0));
+	}
+}
+
+#define ADC_STM32_CONFIG(index)						\
+static const struct adc_stm32_cfg adc_stm32_cfg_##index = {		\
+	.base = (ADC_TypeDef *)DT_INST_REG_ADDR(index),			\
+	.irq_cfg_func = adc_stm32_irq_init,				\
+	.pclken = {							\
+		.enr = DT_INST_CLOCKS_CELL(index, bits),		\
+		.bus = DT_INST_CLOCKS_CELL(index, bus),			\
+	},								\
+	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),			\
+};
+#else
+#define ADC_STM32_CONFIG(index)						\
+static void adc_stm32_cfg_func_##index(void)				\
+{									\
+	IRQ_CONNECT(DT_INST_IRQN(index),				\
+		    DT_INST_IRQ(index, priority),			\
+		    adc_stm32_isr, DEVICE_DT_INST_GET(index), 0);	\
+	irq_enable(DT_INST_IRQN(index));				\
+}									\
 									\
 static const struct adc_stm32_cfg adc_stm32_cfg_##index = {		\
 	.base = (ADC_TypeDef *)DT_INST_REG_ADDR(index),			\
@@ -1060,7 +1116,15 @@ static const struct adc_stm32_cfg adc_stm32_cfg_##index = {		\
 		.bus = DT_INST_CLOCKS_CELL(index, bus),			\
 	},								\
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),			\
-};									\
+};
+#endif /* CONFIG_ADC_STM32_SHARED_IRQS */
+
+#define STM32_ADC_INIT(index)						\
+									\
+PINCTRL_DT_INST_DEFINE(index);						\
+									\
+ADC_STM32_CONFIG(index)							\
+									\
 static struct adc_stm32_data adc_stm32_data_##index = {			\
 	ADC_CONTEXT_INIT_TIMER(adc_stm32_data_##index, ctx),		\
 	ADC_CONTEXT_INIT_LOCK(adc_stm32_data_##index, ctx),		\
@@ -1071,14 +1135,6 @@ DEVICE_DT_INST_DEFINE(index,						\
 		    &adc_stm32_init, NULL,				\
 		    &adc_stm32_data_##index, &adc_stm32_cfg_##index,	\
 		    POST_KERNEL, CONFIG_ADC_INIT_PRIORITY,		\
-		    &api_stm32_driver_api);				\
-									\
-static void adc_stm32_cfg_func_##index(void)				\
-{									\
-	IRQ_CONNECT(DT_INST_IRQN(index),				\
-		    DT_INST_IRQ(index, priority),			\
-		    adc_stm32_isr, DEVICE_DT_INST_GET(index), 0);	\
-	irq_enable(DT_INST_IRQN(index));				\
-}
+		    &api_stm32_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(STM32_ADC_INIT)

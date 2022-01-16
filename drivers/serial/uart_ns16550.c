@@ -302,11 +302,6 @@ static inline uint8_t reg_interval(const struct device *dev)
 #define reg_interval(dev) DEFAULT_REG_INTERVAL
 #endif
 
-#if defined(CONFIG_UART_INTERRUPT_DRIVEN) && defined(CONFIG_PM)
-static const enum pm_state pm_states[] =
-	PM_STATE_LIST_FROM_DT_CPU(DT_NODELABEL(cpu0));
-#endif
-
 static const struct uart_driver_api uart_ns16550_driver_api;
 
 static inline uintptr_t get_port(const struct device *dev)
@@ -660,8 +655,6 @@ static int uart_ns16550_fifo_read(const struct device *dev, uint8_t *rx_data,
  * @brief Enable TX interrupt in IER
  *
  * @param dev UART device struct
- *
- * @return N/A
  */
 static void uart_ns16550_irq_tx_enable(const struct device *dev)
 {
@@ -672,13 +665,18 @@ static void uart_ns16550_irq_tx_enable(const struct device *dev)
 
 	if (!dev_data->tx_stream_on) {
 		dev_data->tx_stream_on = true;
+		uint8_t num_cpu_states;
+		const struct pm_state_info *cpu_states;
+
+		num_cpu_states = pm_state_cpu_get_all(0U, &cpu_states);
+
 		/*
 		 * Power state to be disabled. Some platforms have multiple
 		 * states and need to be given a constraint set according to
 		 * different states.
 		 */
-		for (size_t i = 0U; i < ARRAY_SIZE(pm_states); i++) {
-			pm_constraint_set(pm_states[i]);
+		for (uint8_t i = 0U; i < num_cpu_states; i++) {
+			pm_constraint_set(cpu_states[i].state);
 		}
 	}
 #endif
@@ -691,8 +689,6 @@ static void uart_ns16550_irq_tx_enable(const struct device *dev)
  * @brief Disable TX interrupt in IER
  *
  * @param dev UART device struct
- *
- * @return N/A
  */
 static void uart_ns16550_irq_tx_disable(const struct device *dev)
 {
@@ -705,13 +701,18 @@ static void uart_ns16550_irq_tx_disable(const struct device *dev)
 
 	if (dev_data->tx_stream_on) {
 		dev_data->tx_stream_on = false;
+		uint8_t num_cpu_states;
+		const struct pm_state_info *cpu_states;
+
+		num_cpu_states = pm_state_cpu_get_all(0U, &cpu_states);
+
 		/*
 		 * Power state to be enabled. Some platforms have multiple
 		 * states and need to be given a constraint release according
 		 * to different states.
 		 */
-		for (size_t i = 0U; i < ARRAY_SIZE(pm_states); i++) {
-			pm_constraint_release(pm_states[i]);
+		for (uint8_t i = 0U; i < num_cpu_states; i++) {
+			pm_constraint_release(cpu_states[i].state);
 		}
 	}
 #endif
@@ -759,8 +760,6 @@ static int uart_ns16550_irq_tx_complete(const struct device *dev)
  * @brief Enable RX interrupt in IER
  *
  * @param dev UART device struct
- *
- * @return N/A
  */
 static void uart_ns16550_irq_rx_enable(const struct device *dev)
 {
@@ -775,8 +774,6 @@ static void uart_ns16550_irq_rx_enable(const struct device *dev)
  * @brief Disable RX interrupt in IER
  *
  * @param dev UART device struct
- *
- * @return N/A
  */
 static void uart_ns16550_irq_rx_disable(const struct device *dev)
 {
@@ -809,8 +806,6 @@ static int uart_ns16550_irq_rx_ready(const struct device *dev)
  * @brief Enable error interrupt in IER
  *
  * @param dev UART device struct
- *
- * @return N/A
  */
 static void uart_ns16550_irq_err_enable(const struct device *dev)
 {
@@ -878,8 +873,6 @@ static int uart_ns16550_irq_update(const struct device *dev)
  *
  * @param dev UART device struct
  * @param cb Callback function pointer.
- *
- * @return N/A
  */
 static void uart_ns16550_irq_callback_set(const struct device *dev,
 					  uart_irq_callback_user_data_t cb,
@@ -900,8 +893,6 @@ static void uart_ns16550_irq_callback_set(const struct device *dev,
  * This simply calls the callback function, if one exists.
  *
  * @param arg Argument to ISR.
- *
- * @return N/A
  */
 static void uart_ns16550_isr(const struct device *dev)
 {
@@ -1043,14 +1034,14 @@ static const struct uart_driver_api uart_ns16550_driver_api = {
 	_CONCAT(UART_NS16550_IRQ_FLAGS_SENSE, DT_INST_IRQ_HAS_CELL(n, sense))(n)
 
 /* not PCI(e) */
-#define UART_NS16550_IRQ_CONFIG_PCIE0(n)                                \
-	static void irq_config_func##n(const struct device *dev)        \
-	{                                                               \
-		ARG_UNUSED(dev);                                        \
-		IRQ_CONNECT(DT_INST_IRQN(n), DT_INST_IRQ(n, priority),  \
-			    uart_ns16550_isr, DEVICE_DT_INST_GET(n),    \
-			    UART_NS16550_IRQ_FLAGS(n));                 \
-		irq_enable(DT_INST_IRQN(n));                            \
+#define UART_NS16550_IRQ_CONFIG_PCIE0(n)                                      \
+	static void irq_config_func##n(const struct device *dev)              \
+	{                                                                     \
+		ARG_UNUSED(dev);                                              \
+		IRQ_CONNECT(DT_INST_IRQN(n), DT_INST_IRQ(n, priority),	      \
+			    uart_ns16550_isr, DEVICE_DT_INST_GET(n),	      \
+			    UART_NS16550_IRQ_FLAGS(n));			      \
+		irq_enable(DT_INST_IRQN(n));                                  \
 	}
 
 /* PCI(e) with auto IRQ detection */
@@ -1066,7 +1057,8 @@ static const struct uart_driver_api uart_ns16550_driver_api = {
 		if (irq == PCIE_CONF_INTR_IRQ_NONE) {                         \
 			return;                                               \
 		}                                                             \
-		irq_connect_dynamic(irq, DT_INST_IRQ(n, priority),            \
+		pcie_connect_dynamic_irq(DT_INST_REG_ADDR(n), irq,	      \
+				     DT_INST_IRQ(n, priority),		      \
 				    (void (*)(const void *))uart_ns16550_isr, \
 				    DEVICE_DT_INST_GET(n),                    \
 				    UART_NS16550_IRQ_FLAGS(n));               \

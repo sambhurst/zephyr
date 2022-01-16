@@ -16,6 +16,7 @@
 #include "util/util.h"
 #include "util/mem.h"
 #include "util/memq.h"
+#include "util/dbuf.h"
 
 #include "pdu.h"
 #include "ll.h"
@@ -415,7 +416,7 @@ static void lp_comm_send_req(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t
 		}
 		break;
 	case PROC_TERMINATE:
-		if (ctx->pause || !llcp_tx_alloc_peek(conn, ctx)) {
+		if (!llcp_tx_alloc_peek(conn, ctx)) {
 			ctx->state = LP_COMMON_STATE_WAIT_TX;
 		} else {
 			lp_comm_tx(conn, ctx);
