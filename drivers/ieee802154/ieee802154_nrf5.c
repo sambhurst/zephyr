@@ -542,7 +542,7 @@ static int nrf5_tx(const struct device *dev,
 
 	LOG_DBG("Result: %d", nrf5_data.tx_result);
 
-#if NRF_802154_ENCRYPTION_ENABLED
+#if defined(CONFIG_IEEE802154_2015)
 	/*
 	 * When frame encryption by the radio driver is enabled, the frame stored in
 	 * the tx_psdu buffer is:
@@ -623,12 +623,12 @@ static int nrf5_stop(const struct device *dev)
 	}
 #else
 	ARG_UNUSED(dev);
-#endif
 
 	if (!nrf_802154_sleep()) {
 		LOG_ERR("Error while stopping radio");
 		return -EIO;
 	}
+#endif
 
 	LOG_DBG("nRF5 802154 radio stopped");
 
@@ -696,7 +696,7 @@ static void nrf5_iface_init(struct net_if *iface)
 	ieee802154_init(iface);
 }
 
-#if defined(CONFIG_NRF_802154_ENCRYPTION)
+#if defined(CONFIG_IEEE802154_2015)
 static void nrf5_config_mac_keys(struct ieee802154_key *mac_keys)
 {
 	static nrf_802154_key_id_t stored_key_ids[NRF_802154_SECURITY_KEY_STORAGE_SIZE];
@@ -709,7 +709,8 @@ static void nrf5_config_mac_keys(struct ieee802154_key *mac_keys)
 	}
 
 	i = 0;
-	for (struct ieee802154_key *keys = mac_keys; keys->key_value; keys++) {
+	for (struct ieee802154_key *keys = mac_keys; keys->key_value
+			&& i < NRF_802154_SECURITY_KEY_STORAGE_SIZE; keys++, i++) {
 		nrf_802154_key_t key = {
 			.value.p_cleartext_key = keys->key_value,
 			.id.mode = keys->key_id_mode,
@@ -719,19 +720,18 @@ static void nrf5_config_mac_keys(struct ieee802154_key *mac_keys)
 			.use_global_frame_counter = !(keys->frame_counter_per_key),
 		};
 
-		nrf_802154_security_error_t err = nrf_802154_security_key_store(&key);
-		__ASSERT(err == NRF_802154_SECURITY_ERROR_NONE ||
-				 err == NRF_802154_SECURITY_ERROR_ALREADY_PRESENT,
-			 "Storing key failed, err: %d", err);
+		__ASSERT_EVAL((void)nrf_802154_security_key_store(&key),
+			nrf_802154_security_error_t err = nrf_802154_security_key_store(&key),
+			err == NRF_802154_SECURITY_ERROR_NONE ||
+			err == NRF_802154_SECURITY_ERROR_ALREADY_PRESENT,
+			"Storing key failed, err: %d", err);
 
-		__ASSERT(i < NRF_802154_SECURITY_KEY_STORAGE_SIZE, "Store buffer is full");
 		stored_ids[i] = *key.id.p_key_id;
 		stored_key_ids[i].mode = key.id.mode;
 		stored_key_ids[i].p_key_id = &stored_ids[i];
-		i++;
 	};
 }
-#endif /* CONFIG_NRF_802154_ENCRYPTION */
+#endif /* CONFIG_IEEE802154_2015 */
 
 #if defined(CONFIG_IEEE802154_CSL_ENDPOINT)
 static void nrf5_receive_at(uint32_t start, uint32_t duration, uint8_t channel, uint32_t id)
@@ -829,7 +829,7 @@ static int nrf5_configure(const struct device *dev,
 		nrf5_data.event_handler = config->event_handler;
 		break;
 
-#if defined(CONFIG_NRF_802154_ENCRYPTION)
+#if defined(CONFIG_IEEE802154_2015)
 	case IEEE802154_CONFIG_MAC_KEYS:
 		nrf5_config_mac_keys(config->mac_keys);
 		break;
@@ -837,7 +837,7 @@ static int nrf5_configure(const struct device *dev,
 	case IEEE802154_CONFIG_FRAME_COUNTER:
 		nrf_802154_security_global_frame_counter_set(config->frame_counter);
 		break;
-#endif /* CONFIG_NRF_802154_ENCRYPTION */
+#endif /* CONFIG_IEEE802154_2015 */
 
 	case IEEE802154_CONFIG_ENH_ACK_HEADER_IE: {
 		uint8_t short_addr_le[SHORT_ADDRESS_SIZE];

@@ -15,7 +15,6 @@
 
 /.github/				  @nashif
 /.github/workflows/                       @galak @nashif
-/.buildkite/				  @galak
 /MAINTAINERS.yml                          @MaureenHelm
 /arch/arc/                                @abrodkin @ruuddw @evgeniy-paltsev
 /arch/arm/                                @MaureenHelm @galak @ioannisg
@@ -26,6 +25,7 @@
 /arch/arm64/core/cortex_r/                @povergoing
 /arch/arm64/core/xen/                     @lorc @firscity
 /arch/common/                             @ioannisg @andyross
+/arch/mips/                               @frantony
 /soc/arc/snps_*/                          @abrodkin @ruuddw @evgeniy-paltsev
 /soc/nios2/                               @nashif
 /soc/arm/                                 @MaureenHelm @galak @ioannisg
@@ -70,6 +70,7 @@
 /arch/nios2/                              @nashif
 /arch/posix/                              @aescolar @daor-oti
 /arch/riscv/                              @kgugala @pgielda
+/soc/mips/                                @frantony
 /soc/posix/                               @aescolar @daor-oti
 /soc/riscv/                               @kgugala @pgielda
 /soc/riscv/openisa*/                      @dleach02
@@ -135,6 +136,7 @@
 /boards/arm/sam4s_xplained/               @fallrisk
 /boards/arm/sam_e70_xplained/             @nandojve
 /boards/arm/sam_v71_xult/                 @nandojve
+/boards/arm/scobc_module1/                @yashi
 /boards/arm/v2m_beetle/                   @fvincenzo
 /boards/arm/olimexino_stm32/              @ydamigos
 /boards/arm/sensortile_box/               @avisconti
@@ -147,6 +149,7 @@
 /boards/arm/ubx_bmd345eval_nrf52840/      @Navin-Sankar @brec-u-blox
 /boards/common/                           @mbolivar-nordic
 /boards/deprecated.cmake                  @tejlmand
+/boards/mips/                             @frantony
 /boards/nios2/                            @nashif
 /boards/nios2/altera_max10/               @nashif
 /boards/arm/stm32_min_dev/                @sidcha
@@ -303,6 +306,7 @@
 /drivers/memc/                            @gmarull
 /drivers/misc/                            @tejlmand
 /drivers/misc/ft8xx/                      @hubertmis
+/drivers/mm/                              @dcpleung
 /drivers/modem/hl7800.c                   @LairdCP/zephyr
 /drivers/modem/simcom-sim7080.c           @lgehreke
 /drivers/modem/simcom-sim7080.h           @lgehreke
@@ -316,6 +320,7 @@
 /drivers/pinmux/*it8xxx2*                 @ite
 /drivers/pinmux/*esp32*                   @glaubermaroto
 /drivers/pm_cpu_ops/                      @carlocaione
+/drivers/power_domain/                    @ceolin
 /drivers/ps2/                             @franciscomunoz @sjvasanth1
 /drivers/ps2/*xec*                        @franciscomunoz @sjvasanth1
 /drivers/ps2/*npcx*                       @MulinChao @WealianLiao @ChiHuaL
@@ -385,6 +390,7 @@
 /drivers/timer/*cavs*                     @dcpleung
 /drivers/timer/*stm32_lptim*              @FRASTM
 /drivers/timer/*leon_gptimer*             @martin-aberg
+/drivers/timer/*mips_cp0*                 @frantony
 /drivers/timer/*rcar_cmt*                 @julien-massot
 /drivers/timer/*esp32c3_sys*              @uLipe
 /drivers/timer/*sam0_rtc*                 @bendiscz
@@ -531,6 +537,7 @@
 /include/arch/arm64/                      @carlocaione
 /include/arch/arm64/cortex_r/             @povergoing
 /include/arch/arm/aarch32/irq.h           @carlocaione
+/include/arch/mips/                       @frantony
 /include/arch/nios2/                      @nashif
 /include/arch/nios2/arch.h                @nashif
 /include/arch/posix/                      @aescolar @daor-oti
