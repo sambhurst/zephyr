@@ -104,8 +104,6 @@ enum can_state {
 	CAN_ERROR_PASSIVE,
 	/** Bus-off state (RX/TX error count >= 256). */
 	CAN_BUS_OFF,
-	/** Bus state unknown. */
-	CAN_BUS_UNKNOWN
 };
 
 /**
@@ -347,8 +345,8 @@ typedef int (*can_recover_t)(const struct device *dev, k_timeout_t timeout);
  * @brief Callback API upon getting the CAN controller state
  * See @a can_get_state() for argument description
  */
-typedef enum can_state (*can_get_state_t)(const struct device *dev,
-					  struct can_bus_err_cnt *err_cnt);
+typedef int (*can_get_state_t)(const struct device *dev, enum can_state *state,
+			       struct can_bus_err_cnt *err_cnt);
 
 /**
  * @typedef can_set_state_change_callback_t
@@ -399,6 +397,207 @@ __subsystem struct can_driver_api {
 };
 
 /** @endcond */
+
+#if defined(CONFIG_CAN_STATS) || defined(__DOXYGEN__)
+
+#include <stats/stats.h>
+
+/** @cond INTERNAL_HIDDEN */
+
+STATS_SECT_START(can)
+STATS_SECT_ENTRY32(bit0_error)
+STATS_SECT_ENTRY32(bit1_error)
+STATS_SECT_ENTRY32(stuff_error)
+STATS_SECT_ENTRY32(crc_error)
+STATS_SECT_ENTRY32(form_error)
+STATS_SECT_ENTRY32(ack_error)
+STATS_SECT_END;
+
+STATS_NAME_START(can)
+STATS_NAME(can, bit0_error)
+STATS_NAME(can, bit1_error)
+STATS_NAME(can, stuff_error)
+STATS_NAME(can, crc_error)
+STATS_NAME(can, form_error)
+STATS_NAME(can, ack_error)
+STATS_NAME_END(can);
+
+/** @endcond */
+
+/**
+ * @brief CAN specific device state which allows for CAN device class specific
+ * additions
+ */
+struct can_device_state {
+	struct device_state devstate;
+	struct stats_can stats;
+};
+
+/** @cond INTERNAL_HIDDEN */
+
+/**
+ * @brief Get pointer to CAN statistics structure
+ */
+#define Z_CAN_GET_STATS(dev_)				\
+	CONTAINER_OF(dev_->state, struct can_device_state, devstate)->stats
+
+/** @endcond */
+
+/**
+ * @brief Increment the bit0 error counter for a CAN device
+ *
+ * The bit0 error counter is incremented when the CAN controller is unable to
+ * transmit a dominant bit.
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_BIT0_ERROR_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), bit0_error)
+
+/**
+ * @brief Increment the bit1 (recessive) error counter for a CAN device
+ *
+ * The bit1 error counter is incremented when the CAN controller is unable to
+ * transmit a recessive bit.
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_BIT1_ERROR_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), bit1_error)
+
+/**
+ * @brief Increment the stuffing error counter for a CAN device
+ *
+ * The stuffing error counter is incremented when the CAN controller detects a
+ * bit stuffing error.
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_STUFF_ERROR_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), stuff_error)
+
+/**
+ * @brief Increment the CRC error counter for a CAN device
+ *
+ * The CRC error counter is incremented when the CAN controller detects a frame
+ * with an invalid CRC.
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_CRC_ERROR_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), crc_error)
+
+/**
+ * @brief Increment the form error counter for a CAN device
+ *
+ * The form error counter is incremented when the CAN controller detects a
+ * fixed-form bit field containing illegal bits.
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_FORM_ERROR_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), form_error)
+
+/**
+ * @brief Increment the acknowledge error counter for a CAN device
+ *
+ * The acknowledge error counter is incremented when the CAN controller does not
+ * monitor a dominant bit in the ACK slot.
+ *
+ * @param dev_ Pointer to the device structure for the driver instance.
+ */
+#define CAN_STATS_ACK_ERROR_INC(dev_)			\
+	STATS_INC(Z_CAN_GET_STATS(dev_), ack_error)
+
+/** @cond INTERNAL_HIDDEN */
+
+/**
+ * @brief Define a statically allocated and section assigned CAN device state
+ */
+#define Z_CAN_DEVICE_STATE_DEFINE(node_id, dev_name)			\
+	static struct can_device_state Z_DEVICE_STATE_NAME(dev_name)	\
+	__attribute__((__section__(".z_devstate")));
+
+/**
+ * @brief Define a CAN device init wrapper function
+ *
+ * This does device instance specific initialization of common data (such as stats)
+ * and calls the given init_fn
+ */
+#define Z_CAN_INIT_FN(dev_name, init_fn)				\
+	static inline int UTIL_CAT(dev_name, _init)(const struct device *dev) \
+	{								\
+		struct can_device_state *state =			\
+			CONTAINER_OF(dev->state, struct can_device_state, devstate); \
+		stats_init(&state->stats.s_hdr, STATS_SIZE_32, 6,	\
+			   STATS_NAME_INIT_PARMS(can));			\
+		stats_register(dev->name, &(state->stats.s_hdr));	\
+		return init_fn(dev);					\
+	}
+
+/** @endcond */
+
+/**
+ * @brief Like DEVICE_DT_DEFINE() with CAN device specifics.
+ *
+ * @details Defines a device which implements the CAN API. May generate a custom
+ * device_state container struct and init_fn wrapper when needed depending on
+ * @kconfig{CONFIG_CAN_STATS}.
+ *
+ * @param node_id   The devicetree node identifier.
+ * @param init_fn   Name of the init function of the driver.
+ * @param pm_device PM device resources reference (NULL if device does not use PM).
+ * @param data_ptr  Pointer to the device's private data.
+ * @param cfg_ptr   The address to the structure containing the configuration
+ *                  information for this instance of the driver.
+ * @param level     The initialization level. See SYS_INIT() for
+ *                  details.
+ * @param prio      Priority within the selected initialization level. See
+ *                  SYS_INIT() for details.
+ * @param api_ptr   Provides an initial pointer to the API function struct
+ *                  used by the driver. Can be NULL.
+ */
+#define CAN_DEVICE_DT_DEFINE(node_id, init_fn, pm_device,		\
+			     data_ptr, cfg_ptr, level, prio,		\
+			     api_ptr, ...)				\
+	Z_CAN_DEVICE_STATE_DEFINE(node_id, Z_DEVICE_DT_DEV_NAME(node_id)); \
+	Z_CAN_INIT_FN(Z_DEVICE_DT_DEV_NAME(node_id), init_fn)		\
+	Z_DEVICE_DEFINE(node_id, Z_DEVICE_DT_DEV_NAME(node_id),		\
+			DEVICE_DT_NAME(node_id),			\
+			&UTIL_CAT(Z_DEVICE_DT_DEV_NAME(node_id), _init), \
+			pm_device,					\
+			data_ptr, cfg_ptr, level, prio,			\
+			api_ptr,					\
+			&(Z_DEVICE_STATE_NAME(Z_DEVICE_DT_DEV_NAME(node_id)).devstate), \
+			__VA_ARGS__)
+
+#else /* CONFIG_CAN_STATS */
+
+#define CAN_STATS_BIT0_ERROR_INC(dev_)
+#define CAN_STATS_BIT1_ERROR_INC(dev_)
+#define CAN_STATS_STUFF_ERROR_INC(dev_)
+#define CAN_STATS_CRC_ERROR_INC(dev_)
+#define CAN_STATS_FORM_ERROR_INC(dev_)
+#define CAN_STATS_ACK_ERROR_INC(dev_)
+
+#define CAN_DEVICE_DT_DEFINE(node_id, init_fn, pm_device,		\
+			     data_ptr, cfg_ptr, level, prio,		\
+			     api_ptr, ...)				\
+	DEVICE_DT_DEFINE(node_id, init_fn, pm_device,			\
+			     data_ptr, cfg_ptr, level, prio,		\
+			     api_ptr, __VA_ARGS__)
+
+#endif /* CONFIG_CAN_STATS */
+
+/**
+ * @brief Like CAN_DEVICE_DT_DEFINE() for an instance of a DT_DRV_COMPAT compatible
+ *
+ * @param inst Instance number. This is replaced by <tt>DT_DRV_COMPAT(inst)</tt>
+ *             in the call to CAN_DEVICE_DT_DEFINE().
+ * @param ...  Other parameters as expected by CAN_DEVICE_DT_DEFINE().
+ */
+#define CAN_DEVICE_DT_INST_DEFINE(inst, ...)			\
+	CAN_DEVICE_DT_DEFINE(DT_DRV_INST(inst), __VA_ARGS__)
 
 /**
  * @name CAN controller configuration
@@ -599,17 +798,29 @@ static inline int can_set_bitrate(const struct device *dev,
  */
 
 /**
- * @brief Transmit a CAN frame on the CAN bus
+ * @brief Queue a CAN frame for transmission on the CAN bus
  *
- * Transmit a CAN frame on the CAN bus with optional timeout and completion
- * callback function.
+ * Queue a CAN frame for transmission on the CAN bus with optional timeout and
+ * completion callback function.
+ *
+ * Queued CAN frames are transmitted in order according to the their priority:
+ * - The lower the CAN-ID, the higher the priority.
+ * - Data frames have higher priority than Remote Transmission Request (RTR)
+ *   frames with identical CAN-IDs.
+ * - Frames with standard (11-bit) identifiers have higher priority than frames
+ *   with extended (29-bit) identifiers with identical base IDs (the higher 11
+ *   bits of the extended identifier).
+ * - Transmission order for queued frames with the same priority is hardware
+ *   dependent.
+ *
+ * @note If transmitting segmented messages spanning multiple CAN frames with
+ * identical CAN-IDs, the sender must ensure to only queue one frame at a time
+ * if FIFO order is required.
  *
  * By default, the CAN controller will automatically retry transmission in case
  * of lost bus arbitration or missing acknowledge. Some CAN controllers support
  * disabling automatic retransmissions ("one-shot" mode) via a devicetree
  * property.
- *
- * @see can_write() for a simplified API wrapper.
  *
  * @param dev       Pointer to the device structure for the driver instance.
  * @param frame     CAN frame to transmit.
@@ -640,58 +851,6 @@ static inline int z_impl_can_send(const struct device *dev, const struct zcan_fr
 	const struct can_driver_api *api = (const struct can_driver_api *)dev->api;
 
 	return api->send(dev, frame, timeout, callback, user_data);
-}
-
-/**
- * @brief Wrapper function for writing data to the CAN bus.
- *
- * Simple wrapper function for @a can_send() without the need for filling in a
- * @a zcan_frame struct. This function blocks until the data is sent or a
- * timeout occurs.
- *
- * By default, the CAN controller will automatically retry transmission in case
- * of lost bus arbitration or missing acknowledge. Some CAN controllers support
- * disabling automatic retransmissions ("one-shot" mode) via a devicetree
- * property.
- *
- * @param dev     Pointer to the device structure for the driver instance.
- * @param data    Pointer to the data to write.
- * @param length  Number of bytes to write (max. 8).
- * @param id      CAN identifier used for writing.
- * @param rtr     Write as data frame or Remote Transmission Request (RTR) frame.
- * @param timeout Timeout waiting for an empty TX mailbox or ``K_FOREVER``.
- *
- * @retval 0 if successful.
- * @retval -EINVAL if an invalid parameter was passed to the function.
- * @retval -ENETDOWN if the CAN controller is in bus-off state.
- * @retval -EBUSY if CAN bus arbitration was lost (only applicable if automatic
- *                retransmissions are disabled).
- * @retval -EIO if a general transmit error occurred (e.g. missing ACK if
- *              automatic retransmissions are disabled).
- * @retval -EAGAIN on timeout.
- */
-static inline int can_write(const struct device *dev, const uint8_t *data, uint8_t length,
-			    uint32_t id, enum can_rtr rtr, k_timeout_t timeout)
-{
-	struct zcan_frame frame;
-
-	if (length > 8) {
-		return -EINVAL;
-	}
-
-	frame.id = id;
-
-	if (id > CAN_MAX_STD_ID) {
-		frame.id_type = CAN_EXTENDED_IDENTIFIER;
-	} else {
-		frame.id_type = CAN_STANDARD_IDENTIFIER;
-	}
-
-	frame.dlc = length;
-	frame.rtr = rtr;
-	memcpy(frame.data, data, length);
-
-	return can_send(dev, &frame, timeout, NULL, NULL);
 }
 
 /** @} */
@@ -826,19 +985,21 @@ static inline int z_impl_can_get_max_filters(const struct device *dev, enum can_
  * controller.
  *
  * @param dev          Pointer to the device structure for the driver instance.
+ * @param[out] state   Pointer to the state destination enum or NULL.
  * @param[out] err_cnt Pointer to the err_cnt destination structure or NULL.
  *
- * @retval  state
+ * @retval 0 If successful.
+ * @retval -EIO General input/output error, failed to get state.
  */
-__syscall enum can_state can_get_state(const struct device *dev,
-				       struct can_bus_err_cnt *err_cnt);
+__syscall int can_get_state(const struct device *dev, enum can_state *state,
+			    struct can_bus_err_cnt *err_cnt);
 
-static inline enum can_state z_impl_can_get_state(const struct device *dev,
-						  struct can_bus_err_cnt *err_cnt)
+static inline int z_impl_can_get_state(const struct device *dev, enum can_state *state,
+				       struct can_bus_err_cnt *err_cnt)
 {
 	const struct can_driver_api *api = (const struct can_driver_api *)dev->api;
 
-	return api->get_state(dev, err_cnt);
+	return api->get_state(dev, state, err_cnt);
 }
 
 /**
@@ -1079,8 +1240,7 @@ static inline void can_copy_zfilter_to_filter(const struct zcan_filter *zfilter,
  * `CAN_NO_FREE_FILTER` is returned by `can_add_rx_*()` if no free filters are
  * available. `CAN_TIMEOUT` indicates that @a can_recover() timed out.
  *
- * @warning These definitions are deprecated. Use the corresponding errno
- * definitions instead.
+ * @deprecated Use the corresponding errno definitions instead.
  *
  * @{
  */
@@ -1107,8 +1267,7 @@ static inline void can_copy_zfilter_to_filter(const struct zcan_filter *zfilter,
 /**
  * @brief Configure operation of a host controller.
  *
- * @warning This function is deprecated. Use @a can_set_bitrate() and @a
- * can_set_mode() instead.
+ * @deprecated Use @a can_set_bitrate() and @a can_set_mode() instead.
  *
  * @param dev Pointer to the device structure for the driver instance.
  * @param mode Operation mode.
@@ -1181,8 +1340,8 @@ struct zcan_work {
  * @note The work queue must be initialized before and the caller must have
  * appropriate permissions on it.
  *
- * @warning This function is deprecated. Use @a can_add_rx_filter_msgq() along
- * with @a k_work_poll_submit() instead.
+ * @deprecated Use @a can_add_rx_filter_msgq() along with @a
+ * k_work_poll_submit() instead.
  *
  * @param dev       Pointer to the device structure for the driver instance.
  * @param work_q    Pointer to the already initialized @a zcan_work queue.
@@ -1200,7 +1359,7 @@ __deprecated int can_attach_workq(const struct device *dev, struct k_work_q  *wo
 				  void *user_data, const struct zcan_filter *filter);
 
 /**
- * @see can_add_rx_filter()
+ * @deprecated Use can_add_rx_filter() instead.
  */
 __deprecated static inline int can_attach_isr(const struct device *dev, can_rx_callback_t isr,
 					      void *user_data, const struct zcan_filter *filter)
@@ -1209,12 +1368,12 @@ __deprecated static inline int can_attach_isr(const struct device *dev, can_rx_c
 }
 
 /**
- * @see CAN_MSGQ_DEFINE()
+ * @deprecated Use CAN_MSGQ_DEFINE() instead.
  */
 #define CAN_DEFINE_MSGQ(name, size) CAN_MSGQ_DEFINE(name, size) __DEPRECATED_MACRO
 
 /**
- * @see can_add_rx_filter_msgq()
+ * @deprecated Use can_add_rx_filter_msgq() instead.
  */
 __deprecated static inline int can_attach_msgq(const struct device *dev, struct k_msgq *msg_q,
 					       const struct zcan_filter *filter)
@@ -1223,7 +1382,7 @@ __deprecated static inline int can_attach_msgq(const struct device *dev, struct 
 }
 
 /**
- * @see can_remove_rx_filter()
+ * @deprecated Use can_remove_rx_filter() instead.
  */
 __deprecated static inline void can_detach(const struct device *dev, int filter_id)
 {
@@ -1231,12 +1390,67 @@ __deprecated static inline void can_detach(const struct device *dev, int filter_
 }
 
 /**
- * @see can_set_state_change_callback()
+ * @deprecated Use can_set_state_change_callback() instead.
  */
 __deprecated static inline void can_register_state_change_isr(const struct device *dev,
 							      can_state_change_callback_t isr)
 {
 	can_set_state_change_callback(dev, isr, NULL);
+}
+
+/**
+ * @brief Wrapper function for writing data to the CAN bus.
+ *
+ * Simple wrapper function for @a can_send() without the need for filling in a
+ * @a zcan_frame struct. This function blocks until the data is sent or a
+ * timeout occurs.
+ *
+ * By default, the CAN controller will automatically retry transmission in case
+ * of lost bus arbitration or missing acknowledge. Some CAN controllers support
+ * disabling automatic retransmissions ("one-shot" mode) via a devicetree
+ * property.
+ *
+ * @deprecated Use @a can_send() instead.
+ *
+ * @param dev     Pointer to the device structure for the driver instance.
+ * @param data    Pointer to the data to write.
+ * @param length  Number of bytes to write (max. 8).
+ * @param id      CAN identifier used for writing.
+ * @param rtr     Write as data frame or Remote Transmission Request (RTR) frame.
+ * @param timeout Timeout waiting for an empty TX mailbox or ``K_FOREVER``.
+ *
+ * @retval 0 if successful.
+ * @retval -EINVAL if an invalid parameter was passed to the function.
+ * @retval -ENETDOWN if the CAN controller is in bus-off state.
+ * @retval -EBUSY if CAN bus arbitration was lost (only applicable if automatic
+ *                retransmissions are disabled).
+ * @retval -EIO if a general transmit error occurred (e.g. missing ACK if
+ *              automatic retransmissions are disabled).
+ * @retval -EAGAIN on timeout.
+ */
+__deprecated static inline int can_write(const struct device *dev, const uint8_t *data,
+					 uint8_t length, uint32_t id, enum can_rtr rtr,
+					 k_timeout_t timeout)
+{
+	struct zcan_frame frame;
+
+	if (length > 8) {
+		return -EINVAL;
+	}
+
+	frame.id = id;
+
+	if (id > CAN_MAX_STD_ID) {
+		frame.id_type = CAN_EXTENDED_IDENTIFIER;
+	} else {
+		frame.id_type = CAN_STANDARD_IDENTIFIER;
+	}
+
+	frame.dlc = length;
+	frame.rtr = rtr;
+	memcpy(frame.data, data, length);
+
+	return can_send(dev, &frame, timeout, NULL, NULL);
 }
 
 /** @endcond */

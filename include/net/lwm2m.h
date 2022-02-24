@@ -45,6 +45,7 @@
 #define LWM2M_OBJECT_LOCATION_ID                6
 #define LWM2M_OBJECT_CONNECTIVITY_STATISTICS_ID 7
 #define LWM2M_OBJECT_SOFTWARE_MANAGEMENT_ID     9
+#define LWM2M_OBJECT_PORTFOLIO_ID               16
 #define LWM2M_OBJECT_GATEWAY_ID                 25
 /* clang-format on */
 
@@ -67,6 +68,7 @@
 #define IPSO_OBJECT_TIMER_ID                3340
 #define IPSO_OBJECT_ONOFF_SWITCH_ID         3342
 #define IPSO_OBJECT_PUSH_BUTTON_ID          3347
+#define UCIFI_OBJECT_BATTERY_ID             3411
 #define IPSO_OBJECT_FILLING_LEVEL_SENSOR_ID 3435
 /* clang-format on */
 
@@ -551,7 +553,7 @@ struct lwm2m_objlnk {
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_update_observer_min_period(char *pathstr, uint32_t period_s);
+int lwm2m_engine_update_observer_min_period(const char *pathstr, uint32_t period_s);
 
 /**
  * @brief Change an observer's pmax value.
@@ -566,7 +568,7 @@ int lwm2m_engine_update_observer_min_period(char *pathstr, uint32_t period_s);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_update_observer_max_period(char *pathstr, uint32_t period_s);
+int lwm2m_engine_update_observer_max_period(const char *pathstr, uint32_t period_s);
 
 /**
  * @brief Create an LwM2M object instance.
@@ -579,7 +581,7 @@ int lwm2m_engine_update_observer_max_period(char *pathstr, uint32_t period_s);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_create_obj_inst(char *pathstr);
+int lwm2m_engine_create_obj_inst(const char *pathstr);
 
 /**
  * @brief Delete an LwM2M object instance.
@@ -590,7 +592,7 @@ int lwm2m_engine_create_obj_inst(char *pathstr);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_delete_obj_inst(char *pathstr);
+int lwm2m_engine_delete_obj_inst(const char *pathstr);
 
 /**
  * @brief Set resource (instance) value (opaque buffer)
@@ -601,7 +603,7 @@ int lwm2m_engine_delete_obj_inst(char *pathstr);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_opaque(char *pathstr, char *data_ptr, uint16_t data_len);
+int lwm2m_engine_set_opaque(const char *pathstr, char *data_ptr, uint16_t data_len);
 
 /**
  * @brief Set resource (instance) value (string)
@@ -611,7 +613,7 @@ int lwm2m_engine_set_opaque(char *pathstr, char *data_ptr, uint16_t data_len);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_string(char *pathstr, char *data_ptr);
+int lwm2m_engine_set_string(const char *pathstr, char *data_ptr);
 
 /**
  * @brief Set resource (instance) value (u8)
@@ -621,7 +623,7 @@ int lwm2m_engine_set_string(char *pathstr, char *data_ptr);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_u8(char *pathstr, uint8_t value);
+int lwm2m_engine_set_u8(const char *pathstr, uint8_t value);
 
 /**
  * @brief Set resource (instance) value (u16)
@@ -631,7 +633,7 @@ int lwm2m_engine_set_u8(char *pathstr, uint8_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_u16(char *pathstr, uint16_t value);
+int lwm2m_engine_set_u16(const char *pathstr, uint16_t value);
 
 /**
  * @brief Set resource (instance) value (u32)
@@ -641,7 +643,7 @@ int lwm2m_engine_set_u16(char *pathstr, uint16_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_u32(char *pathstr, uint32_t value);
+int lwm2m_engine_set_u32(const char *pathstr, uint32_t value);
 
 /**
  * @brief Set resource (instance) value (u64)
@@ -651,7 +653,7 @@ int lwm2m_engine_set_u32(char *pathstr, uint32_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_u64(char *pathstr, uint64_t value);
+int lwm2m_engine_set_u64(const char *pathstr, uint64_t value);
 
 /**
  * @brief Set resource (instance) value (s8)
@@ -661,7 +663,7 @@ int lwm2m_engine_set_u64(char *pathstr, uint64_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_s8(char *pathstr, int8_t value);
+int lwm2m_engine_set_s8(const char *pathstr, int8_t value);
 
 /**
  * @brief Set resource (instance) value (s16)
@@ -671,7 +673,7 @@ int lwm2m_engine_set_s8(char *pathstr, int8_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_s16(char *pathstr, int16_t value);
+int lwm2m_engine_set_s16(const char *pathstr, int16_t value);
 
 /**
  * @brief Set resource (instance) value (s32)
@@ -681,7 +683,7 @@ int lwm2m_engine_set_s16(char *pathstr, int16_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_s32(char *pathstr, int32_t value);
+int lwm2m_engine_set_s32(const char *pathstr, int32_t value);
 
 /**
  * @brief Set resource (instance) value (s64)
@@ -691,7 +693,7 @@ int lwm2m_engine_set_s32(char *pathstr, int32_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_s64(char *pathstr, int64_t value);
+int lwm2m_engine_set_s64(const char *pathstr, int64_t value);
 
 /**
  * @brief Set resource (instance) value (bool)
@@ -701,7 +703,7 @@ int lwm2m_engine_set_s64(char *pathstr, int64_t value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_bool(char *pathstr, bool value);
+int lwm2m_engine_set_bool(const char *pathstr, bool value);
 
 /**
  * @brief Set resource (instance) value (double)
@@ -711,7 +713,7 @@ int lwm2m_engine_set_bool(char *pathstr, bool value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_float(char *pathstr, double *value);
+int lwm2m_engine_set_float(const char *pathstr, double *value);
 
 /**
  * @brief Set resource (instance) value (ObjLnk)
@@ -721,7 +723,7 @@ int lwm2m_engine_set_float(char *pathstr, double *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_objlnk(char *pathstr, struct lwm2m_objlnk *value);
+int lwm2m_engine_set_objlnk(const char *pathstr, struct lwm2m_objlnk *value);
 
 /**
  * @brief Get resource (instance) value (opaque buffer)
@@ -732,7 +734,7 @@ int lwm2m_engine_set_objlnk(char *pathstr, struct lwm2m_objlnk *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_opaque(char *pathstr, void *buf, uint16_t buflen);
+int lwm2m_engine_get_opaque(const char *pathstr, void *buf, uint16_t buflen);
 
 /**
  * @brief Get resource (instance) value (string)
@@ -743,7 +745,7 @@ int lwm2m_engine_get_opaque(char *pathstr, void *buf, uint16_t buflen);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_string(char *pathstr, void *str, uint16_t strlen);
+int lwm2m_engine_get_string(const char *pathstr, void *str, uint16_t strlen);
 
 /**
  * @brief Get resource (instance) value (u8)
@@ -753,7 +755,7 @@ int lwm2m_engine_get_string(char *pathstr, void *str, uint16_t strlen);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_u8(char *pathstr, uint8_t *value);
+int lwm2m_engine_get_u8(const char *pathstr, uint8_t *value);
 
 /**
  * @brief Get resource (instance) value (u16)
@@ -763,7 +765,7 @@ int lwm2m_engine_get_u8(char *pathstr, uint8_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_u16(char *pathstr, uint16_t *value);
+int lwm2m_engine_get_u16(const char *pathstr, uint16_t *value);
 
 /**
  * @brief Get resource (instance) value (u32)
@@ -773,7 +775,7 @@ int lwm2m_engine_get_u16(char *pathstr, uint16_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_u32(char *pathstr, uint32_t *value);
+int lwm2m_engine_get_u32(const char *pathstr, uint32_t *value);
 
 /**
  * @brief Get resource (instance) value (u64)
@@ -783,7 +785,7 @@ int lwm2m_engine_get_u32(char *pathstr, uint32_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_u64(char *pathstr, uint64_t *value);
+int lwm2m_engine_get_u64(const char *pathstr, uint64_t *value);
 
 /**
  * @brief Get resource (instance) value (s8)
@@ -793,7 +795,7 @@ int lwm2m_engine_get_u64(char *pathstr, uint64_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_s8(char *pathstr, int8_t *value);
+int lwm2m_engine_get_s8(const char *pathstr, int8_t *value);
 
 /**
  * @brief Get resource (instance) value (s16)
@@ -803,7 +805,7 @@ int lwm2m_engine_get_s8(char *pathstr, int8_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_s16(char *pathstr, int16_t *value);
+int lwm2m_engine_get_s16(const char *pathstr, int16_t *value);
 
 /**
  * @brief Get resource (instance) value (s32)
@@ -813,7 +815,7 @@ int lwm2m_engine_get_s16(char *pathstr, int16_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_s32(char *pathstr, int32_t *value);
+int lwm2m_engine_get_s32(const char *pathstr, int32_t *value);
 
 /**
  * @brief Get resource (instance) value (s64)
@@ -823,7 +825,7 @@ int lwm2m_engine_get_s32(char *pathstr, int32_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_s64(char *pathstr, int64_t *value);
+int lwm2m_engine_get_s64(const char *pathstr, int64_t *value);
 
 /**
  * @brief Get resource (instance) value (bool)
@@ -833,7 +835,7 @@ int lwm2m_engine_get_s64(char *pathstr, int64_t *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_bool(char *pathstr, bool *value);
+int lwm2m_engine_get_bool(const char *pathstr, bool *value);
 
 /**
  * @brief Get resource (instance) value (double)
@@ -843,7 +845,7 @@ int lwm2m_engine_get_bool(char *pathstr, bool *value);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_float(char *pathstr, double *buf);
+int lwm2m_engine_get_float(const char *pathstr, double *buf);
 
 /**
  * @brief Get resource (instance) value (ObjLnk)
@@ -853,7 +855,7 @@ int lwm2m_engine_get_float(char *pathstr, double *buf);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_objlnk(char *pathstr, struct lwm2m_objlnk *buf);
+int lwm2m_engine_get_objlnk(const char *pathstr, struct lwm2m_objlnk *buf);
 
 
 /**
@@ -866,7 +868,7 @@ int lwm2m_engine_get_objlnk(char *pathstr, struct lwm2m_objlnk *buf);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_register_read_callback(char *pathstr,
+int lwm2m_engine_register_read_callback(const char *pathstr,
 					lwm2m_engine_get_data_cb_t cb);
 
 /**
@@ -881,7 +883,7 @@ int lwm2m_engine_register_read_callback(char *pathstr,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_register_pre_write_callback(char *pathstr,
+int lwm2m_engine_register_pre_write_callback(const char *pathstr,
 					     lwm2m_engine_get_data_cb_t cb);
 
 /**
@@ -904,7 +906,7 @@ int lwm2m_engine_register_pre_write_callback(char *pathstr,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_register_validate_callback(char *pathstr,
+int lwm2m_engine_register_validate_callback(const char *pathstr,
 					    lwm2m_engine_set_data_cb_t cb);
 
 /**
@@ -921,7 +923,7 @@ int lwm2m_engine_register_validate_callback(char *pathstr,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_register_post_write_callback(char *pathstr,
+int lwm2m_engine_register_post_write_callback(const char *pathstr,
 					      lwm2m_engine_set_data_cb_t cb);
 
 /**
@@ -934,7 +936,7 @@ int lwm2m_engine_register_post_write_callback(char *pathstr,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_register_exec_callback(char *pathstr,
+int lwm2m_engine_register_exec_callback(const char *pathstr,
 					lwm2m_engine_execute_cb_t cb);
 
 /**
@@ -991,7 +993,7 @@ int lwm2m_engine_register_delete_callback(uint16_t obj_id,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_set_res_data(char *pathstr, void *data_ptr, uint16_t data_len,
+int lwm2m_engine_set_res_data(const char *pathstr, void *data_ptr, uint16_t data_len,
 			      uint8_t data_flags);
 
 /**
@@ -1007,7 +1009,7 @@ int lwm2m_engine_set_res_data(char *pathstr, void *data_ptr, uint16_t data_len,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_get_res_data(char *pathstr, void **data_ptr,
+int lwm2m_engine_get_res_data(const char *pathstr, void **data_ptr,
 			      uint16_t *data_len, uint8_t *data_flags);
 
 /**
@@ -1021,7 +1023,7 @@ int lwm2m_engine_get_res_data(char *pathstr, void **data_ptr,
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_create_res_inst(char *pathstr);
+int lwm2m_engine_create_res_inst(const char *pathstr);
 
 /**
  * @brief Delete a resource instance
@@ -1032,7 +1034,7 @@ int lwm2m_engine_create_res_inst(char *pathstr);
  *
  * @return 0 for success or negative in case of error.
  */
-int lwm2m_engine_delete_res_inst(char *pathstr);
+int lwm2m_engine_delete_res_inst(const char *pathstr);
 
 /**
  * @brief Update the period of a given service.
@@ -1060,6 +1062,19 @@ int lwm2m_engine_update_service_period(k_work_handler_t service, uint32_t period
  * @return 0 for success or negative in case of error.
  */
 int lwm2m_update_device_service_period(uint32_t period_ms);
+
+/**
+ * @brief Check whether a path is observed
+ *
+ * @param[in] pathstr LwM2M path string to check, e.g. "3/0/1"
+ *
+ * @return true when there exists an observation of the same level
+ *         or lower as the given path, false if it doesn't or path is not a
+ *         valid LwM2M-path.
+ *         E.g. true if path refers to a resource and the parent object has an
+ *         observation, false for the inverse.
+ */
+bool lwm2m_engine_path_is_observed(const char *pathstr);
 
 /**
  * @brief Start the LwM2M engine
@@ -1183,6 +1198,20 @@ void lwm2m_rd_client_update(void);
  * @return Resulting formatted path string
  */
 char *lwm2m_path_log_strdup(char *buf, struct lwm2m_obj_path *path);
+
+/** 
+ * @brief LwM2M SEND operation to given path list
+ *
+ * @param ctx LwM2M context
+ * @param path_list LwM2M Path string list
+ * @param path_list_size Length of path list. Max size is CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE
+ * @param confirmation_request True request confirmation for operation.
+ * 
+ * @return 0 for success or negative in case of error.
+ *
+ */
+int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t path_list_size,
+		      bool confirmation_request);
 
 #endif	/* ZEPHYR_INCLUDE_NET_LWM2M_H_ */
 /**@}  */

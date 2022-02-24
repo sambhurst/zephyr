@@ -31,6 +31,12 @@ config CAN_SHELL
 	help
 	  Enable CAN Shell for testing.
 
+config CAN_STATS
+	bool "Enable CAN controller device statistics"
+	depends on STATS
+	help
+	  Enable CAN controller device statistics.
+
 config CAN_HAS_CANFD
 	bool
 	help
@@ -96,6 +102,7 @@ config CAN_AUTO_BUS_OFF_RECOVERY
 source "drivers/can/Kconfig.sam"
 source "drivers/can/Kconfig.stm32"
 source "drivers/can/Kconfig.stm32fd"
+source "drivers/can/Kconfig.stm32h7"
 source "drivers/can/Kconfig.mcux"
 source "drivers/can/Kconfig.mcp2515"
 source "drivers/can/Kconfig.mcan"

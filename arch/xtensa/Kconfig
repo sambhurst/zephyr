@@ -6,18 +6,6 @@
 menu "XTENSA Options"
 	depends on XTENSA
 
-menu "Specific core configuration"
-
-config IRQ_OFFLOAD_INTNUM
-	int "IRQ offload SW interrupt index"
-	help
-	  The index of the software interrupt to be used for IRQ offload.
-
-	  Please note that in order for IRQ offload to work correctly the selected
-	  interrupt shall have its priority shall not exceed XCHAL_EXCM_LEVEL.
-
-endmenu
-
 config ARCH
 	default "xtensa"
 
@@ -54,13 +42,6 @@ config XTENSA_USE_CORE_CRT1
 	help
 	  SoC or boards might define their own __start by setting this setting
 	  to false.
-
-config XTENSA_KERNEL_CPU_PTR_SR
-	string
-	default "MISC0"
-	help
-	  Specify which special register to store the pointer to
-	  _kernel.cpus[] for the current CPU.
 
 config XTENSA_ENABLE_BACKTRACE
 	bool "Enable backtrace on panic exception"

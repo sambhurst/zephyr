@@ -166,6 +166,10 @@ struct bt_hci_cmd_hdr {
 #define BT_LE_FEAT_BIT_PWR_CTRL_REQ             33
 #define BT_LE_FEAT_BIT_PWR_CHG_IND              34
 #define BT_LE_FEAT_BIT_PATH_LOSS_MONITOR        35
+#define BT_LE_FEAT_BIT_PER_ADV_ADI_SUPP         36
+#define BT_LE_FEAT_BIT_CONN_SUBRATING           37
+#define BT_LE_FEAT_BIT_CONN_SUBRATING_HOST_SUPP 38
+#define BT_LE_FEAT_BIT_CHANNEL_CLASSIFICATION   39
 
 #define BT_LE_FEAT_TEST(feat, n)                (feat[(n) >> 3] & \
 						 BIT((n) & 7))
@@ -1607,7 +1611,7 @@ struct bt_hci_rp_le_set_conn_cte_tx_params {
 struct bt_hci_cp_le_conn_cte_req_enable {
 	uint16_t handle;
 	uint8_t  enable;
-	uint8_t  cte_request_interval;
+	uint16_t cte_request_interval;
 	uint8_t  requested_cte_length;
 	uint8_t  requested_cte_type;
 } __packed;
@@ -2495,8 +2499,15 @@ struct bt_hci_evt_le_connection_iq_report {
 	struct bt_hci_le_iq_sample sample[0];
 } __packed;
 
+#define BT_HCI_CTE_REQ_STATUS_RSP_WITHOUT_CTE  0x0
+
 #define BT_HCI_EVT_LE_CTE_REQUEST_FAILED       0x17
 struct bt_hci_evt_le_cte_req_failed {
+	/* According to BT 5.3 Core Spec the status field may have following
+	 * values:
+	 * - BT_HCI_CTE_REQ_STATUS_RSP_WIHOUT_CTE when received LL_CTE_RSP_PDU without CTE.
+	 * - Other Controller error code for peer rejected request.
+	 */
 	uint8_t  status;
 	uint16_t conn_handle;
 } __packed;

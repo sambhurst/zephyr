@@ -37,12 +37,12 @@ manifest:
       groups:
         - hal
     - name: edtt
-      revision: c94f63865a803b18a2ab9eca70d2a9ab881130f6
+      revision: 1fc2e6f7d2a01a01074456f2ef2ccf1f3df7fac1
       path: tools/edtt
       groups:
         - tools
     - name: fatfs
-      revision: 09a9d913c61dccbb8ff92d8943b452c614ac5292
+      revision: 9237454a30bcf6e14a89db174e8dbeb8f31831d2
       path: modules/fs/fatfs
       groups:
         - fs
@@ -57,7 +57,7 @@ manifest:
       groups:
         - hal
     - name: hal_atmel
-      revision: 9f78f520f6cbb997e5b44fe8ab17dd5bf2448095
+      revision: 7c24242679372edc81cc1f9968e02b51127d3677
       path: modules/hal/atmel
       groups:
         - hal
@@ -67,7 +67,7 @@ manifest:
       groups:
         - hal
     - name: hal_espressif
-      revision: bd2e2d8dcdc19defdb1bf6e07fb94f62bc99c925
+      revision: bcd7565ffa390d5774dc2fbe71a002faa9a7d082
       path: modules/hal/espressif
       west-commands: west/west-commands.yml
       groups:
@@ -88,7 +88,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: a42b016d7c7610489f5f8c79773fedc05ba352ee
+      revision: b1db86f188c3c5864985e1bd18a849d53f1c0a2d
       path: modules/hal/nordic
       groups:
         - hal
@@ -98,7 +98,7 @@ manifest:
       groups:
         - hal
     - name: hal_nxp
-      revision: ebf3d15a8497639db1c95ab58a4d9bd72ed8f316
+      revision: 9629f15fd80169cc9669e3fbb1260467c3aeb175
       path: modules/hal/nxp
       groups:
         - hal
@@ -113,6 +113,11 @@ manifest:
       repo-path: hal_quicklogic
       groups:
         - hal
+    - name: hal_rpi_pico
+      path: modules/hal/rpi_pico
+      revision: 191f5ba46fda49523cdaaef27583d1c875ba2c36
+      groups:
+        - hal
     - name: hal_silabs
       revision: be39d4eebeddac6e18e9c0c3ba1b31ad1e82eaed
       path: modules/hal/silabs
@@ -124,7 +129,7 @@ manifest:
       groups:
         - hal
     - name: hal_stm32
-      revision: 91531028be0bfa554ae1dd9e2b5d3ed6fd7287c3
+      revision: 300109f80730cb2477bfcc706a6602b9870336b3
       path: modules/hal/stm32
       groups:
         - hal
@@ -168,7 +173,7 @@ manifest:
       groups:
         - crypto
     - name: mcuboot
-      revision: 399720d1cabd26c4356445d351f263b31e942961
+      revision: 89936c338e46f43cb177a8b928cd80b90f3ace8f
       path: bootloader/mcuboot
     - name: mipi-sys-t
       path: modules/debug/mipi-sys-t
@@ -213,12 +218,12 @@ manifest:
       groups:
         - crypto
     - name: TraceRecorderSource
-      revision: 36c577727642457b0db7274298a4b96558374832
+      revision: e8ca3b6a83d19b2fc4738a0d9607190436e5e452
       path: modules/debug/TraceRecorder
       groups:
         - debug
     - name: trusted-firmware-m
-      revision: c8134809a9439571c54d36ef39210270dbee8f67
+      revision: 5d32c3e64b3d589548e881eeeeb37d84944c90af
       path: modules/tee/tf-m/trusted-firmware-m
       groups:
         - tee
@@ -228,7 +233,7 @@ manifest:
       groups:
         - tee
     - name: psa-arch-tests
-      revision: 186cba2543dff73d0cda5509d26f02a0b39ee66e
+      revision: 0aab24602cbef30f6422e7ef1066a8473073e586
       path: modules/tee/tf-m/psa-arch-tests
       groups:
         - tee

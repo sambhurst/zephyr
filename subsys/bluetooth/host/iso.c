@@ -28,7 +28,7 @@
 
 #if defined(CONFIG_BT_ISO_UNICAST) || defined(CONFIG_BT_ISO_SYNC_RECEIVER)
 NET_BUF_POOL_FIXED_DEFINE(iso_rx_pool, CONFIG_BT_ISO_RX_BUF_COUNT,
-			  CONFIG_BT_ISO_RX_MTU, 8, NULL);
+			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_RX_MTU), 8, NULL);
 
 static struct bt_iso_recv_info iso_info_data[CONFIG_BT_ISO_RX_BUF_COUNT];
 #define iso_info(buf) (&iso_info_data[net_buf_id(buf)])
@@ -876,9 +876,13 @@ void hci_le_cis_established(struct net_buf *buf)
 
 	if (!evt->status) {
 		if (iso->role == BT_HCI_ROLE_PERIPHERAL) {
-			struct bt_iso_chan *chan = iso->iso.chan;
 			struct bt_iso_chan_io_qos *rx;
 			struct bt_iso_chan_io_qos *tx;
+			struct bt_conn_iso *iso_conn;
+			struct bt_iso_chan *chan;
+
+			iso_conn = &iso->iso;
+			chan = iso_conn->chan;
 
 			__ASSERT(chan != NULL && chan->qos != NULL,
 				 "Invalid ISO chan");
@@ -895,6 +899,8 @@ void hci_le_cis_established(struct net_buf *buf)
 				tx->phy = evt->p_phy;
 				tx->sdu = evt->p_max_pdu;
 			}
+
+			iso_conn->type = BT_ISO_CHAN_TYPE_CONNECTED;
 		} /* values are already set for central */
 
 		/* TODO: Add CIG sync delay */

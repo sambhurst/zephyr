@@ -16,6 +16,7 @@
 #include <bluetooth/hci.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
+#include <bluetooth/l2cap.h>
 #include <drivers/bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_L2CAP)
@@ -82,7 +83,13 @@ struct bt_l2cap {
 	struct bt_l2cap_le_chan	chan;
 };
 
+static const struct bt_l2cap_ecred_cb *ecred_cb;
 static struct bt_l2cap bt_l2cap_pool[CONFIG_BT_MAX_CONN];
+
+void bt_l2cap_register_ecred_cb(const struct bt_l2cap_ecred_cb *cb)
+{
+	ecred_cb = cb;
+}
 
 static uint8_t get_ident(void)
 {
@@ -1053,9 +1060,9 @@ static uint16_t l2cap_check_security(struct bt_conn *conn,
 
 	if (keys) {
 		if (conn->role == BT_HCI_ROLE_CENTRAL) {
-			ltk_present = keys->id & (BT_KEYS_LTK_P256 | BT_KEYS_PERIPH_LTK);
+			ltk_present = keys->keys & (BT_KEYS_LTK_P256 | BT_KEYS_PERIPH_LTK);
 		} else {
-			ltk_present = keys->id & (BT_KEYS_LTK_P256 | BT_KEYS_LTK);
+			ltk_present = keys->keys & (BT_KEYS_LTK_P256 | BT_KEYS_LTK);
 		}
 	} else {
 		ltk_present = false;
@@ -1161,6 +1168,7 @@ static void le_ecred_conn_req(struct bt_l2cap *l2cap, uint8_t ident,
 	uint16_t scid, dcid[L2CAP_ECRED_CHAN_MAX];
 	int i = 0;
 	uint8_t req_cid_count;
+	uint8_t succeeded = 0;
 
 	/* set dcid to zeros here, in case of all connections refused error */
 	memset(dcid, 0, sizeof(dcid));
@@ -1220,6 +1228,7 @@ static void le_ecred_conn_req(struct bt_l2cap *l2cap, uint8_t ident,
 		case BT_L2CAP_LE_SUCCESS:
 			ch = BT_L2CAP_LE_CHAN(chan[i]);
 			dcid[i++] = sys_cpu_to_le16(ch->rx.cid);
+			succeeded++;
 			continue;
 		/* Some connections refused – invalid Source CID */
 		/* Some connections refused – Source CID already allocated */
@@ -1240,7 +1249,7 @@ response:
 				      sizeof(*rsp) +
 				      (sizeof(scid) * req_cid_count));
 	if (!buf) {
-		return;
+		goto callback;
 	}
 
 	rsp = net_buf_add(buf, sizeof(*rsp));
@@ -1255,6 +1264,11 @@ response:
 	net_buf_add_mem(buf, dcid, sizeof(scid) * req_cid_count);
 
 	l2cap_send(conn, BT_L2CAP_CID_LE_SIG, buf);
+
+callback:
+	if (ecred_cb && ecred_cb->ecred_conn_req) {
+		ecred_cb->ecred_conn_req(conn, result, req_cid_count, succeeded);
+	}
 }
 
 static void le_ecred_reconf_req(struct bt_l2cap *l2cap, uint8_t ident,
@@ -1499,6 +1513,8 @@ static void le_ecred_conn_rsp(struct bt_l2cap *l2cap, uint8_t ident,
 	struct bt_l2cap_le_chan *chan;
 	struct bt_l2cap_ecred_conn_rsp *rsp;
 	uint16_t dcid, mtu, mps, credits, result;
+	uint8_t attempted = 0;
+	uint8_t succeeded = 0;
 
 	if (buf->len < sizeof(*rsp)) {
 		BT_ERR("Too small ecred conn rsp packet size");
@@ -1543,6 +1559,7 @@ static void le_ecred_conn_rsp(struct bt_l2cap *l2cap, uint8_t ident,
 			k_work_cancel_delayable(&chan->chan.rtx_work);
 
 			dcid = net_buf_pull_le16(buf);
+			attempted++;
 
 			BT_DBG("dcid 0x%04x", dcid);
 
@@ -1588,6 +1605,8 @@ static void le_ecred_conn_rsp(struct bt_l2cap *l2cap, uint8_t ident,
 			/* Give credits */
 			l2cap_chan_tx_give_credits(chan, credits);
 			l2cap_chan_rx_give_credits(chan, chan->rx.init_credits);
+
+			succeeded++;
 		}
 		break;
 	case BT_L2CAP_LE_ERR_PSM_NOT_SUPP:
@@ -1596,6 +1615,10 @@ static void le_ecred_conn_rsp(struct bt_l2cap *l2cap, uint8_t ident,
 			bt_l2cap_chan_del(&chan->chan);
 		}
 		break;
+	}
+
+	if (ecred_cb && ecred_cb->ecred_conn_rsp) {
+		ecred_cb->ecred_conn_rsp(conn, result, attempted, succeeded);
 	}
 }
 #endif /* CONFIG_BT_L2CAP_ECRED */
@@ -2143,10 +2166,28 @@ static void l2cap_chan_shutdown(struct bt_l2cap_chan *chan)
 	}
 }
 
+/** @brief Get @c chan->state.
+ *
+ * This field does not exist when @kconfig{CONFIG_BT_L2CAP_DYNAMIC_CHANNEL} is
+ * disabled. In that case, this function returns @ref BT_L2CAP_CONNECTED since
+ * the struct can only represent static channels in that case and static
+ * channels are always connected.
+ */
+static inline bt_l2cap_chan_state_t bt_l2cap_chan_get_state(struct bt_l2cap_chan *chan)
+{
+#if defined(CONFIG_BT_L2CAP_DYNAMIC_CHANNEL)
+	return chan->state;
+#else
+	return BT_L2CAP_CONNECTED;
+#endif
+}
+
 static void l2cap_chan_send_credits(struct bt_l2cap_le_chan *chan,
 				    struct net_buf *buf, uint16_t credits)
 {
 	struct bt_l2cap_le_credits *ev;
+
+	__ASSERT_NO_MSG(bt_l2cap_chan_get_state(&chan->chan) == BT_L2CAP_CONNECTED);
 
 	/* Cap the number of credits given */
 	if (credits > chan->rx.init_credits) {
@@ -2245,6 +2286,8 @@ static void l2cap_chan_le_recv_sdu(struct bt_l2cap_le_chan *chan,
 
 	BT_DBG("chan %p len %zu", chan, net_buf_frags_len(buf));
 
+	__ASSERT_NO_MSG(bt_l2cap_chan_get_state(&chan->chan) == BT_L2CAP_CONNECTED);
+
 	/* Receiving complete SDU, notify channel and reset SDU buf */
 	err = chan->chan.ops->recv(&chan->chan, buf);
 	if (err < 0) {
@@ -2256,7 +2299,10 @@ static void l2cap_chan_le_recv_sdu(struct bt_l2cap_le_chan *chan,
 		return;
 	}
 
-	l2cap_chan_send_credits(chan, buf, seg);
+	if (bt_l2cap_chan_get_state(&chan->chan) == BT_L2CAP_CONNECTED) {
+		l2cap_chan_send_credits(chan, buf, seg);
+	}
+
 	net_buf_unref(buf);
 }
 
