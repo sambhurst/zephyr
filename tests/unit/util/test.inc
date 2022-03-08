@@ -162,28 +162,17 @@ skipped:
 	#undef test_IF_ENABLED_FLAG_B
 }
 
-void test_UTIL_LISTIFY(void)
+void test_LISTIFY(void)
 {
-	int i = 0;
+	int ab0 = 1;
+	int ab1 = 1;
+#define A_PTR(x, name0, name1) &UTIL_CAT(UTIL_CAT(name0, name1), x)
 
-#define INC(x, n, m)		\
-	do {			\
-		i += (x + n + m);\
-	} while (0);
+	int *a[] = { LISTIFY(2, A_PTR, (,), a, b) };
 
-#define DEFINE(x, y) int a##x = x * y;
-#define MARK_UNUSED(x, _) ARG_UNUSED(a##x);
-
-	UTIL_LISTIFY(4, DEFINE, 2)
-	UTIL_LISTIFY(4, MARK_UNUSED, _)
-
-	UTIL_LISTIFY(4, INC, 1, 2)
-
-	zassert_equal(i, 0 + 1 + 2 + 3 + 4 * (1 + 2), NULL);
-	zassert_equal(a0, 0, NULL);
-	zassert_equal(a1, 2, NULL);
-	zassert_equal(a2, 4, NULL);
-	zassert_equal(a3, 6, NULL);
+	zassert_equal(ARRAY_SIZE(a), 2, NULL);
+	zassert_equal(a[0], &ab0, NULL);
+	zassert_equal(a[1], &ab1, NULL);
 }
 
 void test_MACRO_MAP_CAT(void)
@@ -460,7 +449,7 @@ void test_cc(void)
 			 ztest_unit_test(test_UTIL_OR),
 			 ztest_unit_test(test_UTIL_AND),
 			 ztest_unit_test(test_IF_ENABLED),
-			 ztest_unit_test(test_UTIL_LISTIFY),
+			 ztest_unit_test(test_LISTIFY),
 			 ztest_unit_test(test_MACRO_MAP_CAT),
 			 ztest_unit_test(test_z_max_z_min_z_clamp),
 			 ztest_unit_test(test_CLAMP),

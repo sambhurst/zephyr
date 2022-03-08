@@ -21,9 +21,10 @@
 #define EVENT_DONE_LINK_CNT 1
 #endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 
-#define ADV_INT_UNIT_US  625U
-#define SCAN_INT_UNIT_US 625U
-#define CONN_INT_UNIT_US 1250U
+#define ADV_INT_UNIT_US      625U
+#define SCAN_INT_UNIT_US     625U
+#define CONN_INT_UNIT_US     1250U
+#define PERIODIC_INT_UNIT_US 1250U
 
 /* Intervals after which connection or sync establishment is considered lost */
 #define CONN_ESTAB_COUNTDOWN 6U
@@ -163,6 +164,21 @@ enum {
 #define BT_CTLR_SYNC_ISO_STREAM_MAX 0
 #endif /* !CONFIG_BT_CTLR_SYNC_ISO */
 
+/* Define the ISO Connections Stream Handle base value */
+#if defined(CONFIG_BT_CTLR_CONN_ISO)
+#if defined(CONFIG_BT_CTLR_SYNC_ISO)
+#define BT_CTLR_CONN_ISO_STREAM_HANDLE_BASE \
+	(BT_CTLR_SYNC_ISO_STREAM_HANDLE_BASE + \
+	 CONFIG_BT_CTLR_SYNC_ISO_STREAM_COUNT)
+#elif defined(CONFIG_BT_CTLR_ADV_ISO)
+#define BT_CTLR_CONN_ISO_STREAM_HANDLE_BASE \
+	(BT_CTLR_ADV_ISO_STREAM_HANDLE_BASE + \
+	 CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT)
+#else /* !CONFIG_BT_CTLR_ADV_ISO && !CONFIG_BT_CTLR_SYNC_ISO */
+#define BT_CTLR_CONN_ISO_STREAM_HANDLE_BASE (CONFIG_BT_MAX_CONN)
+#endif /* !CONFIG_BT_CTLR_ADV_ISO && !CONFIG_BT_CTLR_SYNC_ISO */
+#endif /* CONFIG_BT_CTLR_CONN_ISO */
+
 #define TICKER_ID_ULL_BASE ((TICKER_ID_LLL_PREEMPT) + 1)
 
 enum done_result {
@@ -238,7 +254,7 @@ struct lll_event {
 	uint8_t                  is_aborted:1;
 };
 
-#define DEFINE_NODE_RX_USER_TYPE(i, _) NODE_RX_TYPE_##i,
+#define DEFINE_NODE_RX_USER_TYPE(i, _) NODE_RX_TYPE_##i
 
 enum node_rx_type {
 	/* Unused */
@@ -291,7 +307,7 @@ enum node_rx_type {
 #if defined(CONFIG_BT_CTLR_USER_EXT)
 	/* No entries shall be added after the NODE_RX_TYPE_USER_START/END */
 	NODE_RX_TYPE_USER_START,
-	UTIL_LISTIFY(CONFIG_BT_CTLR_USER_EVT_RANGE, DEFINE_NODE_RX_USER_TYPE, _)
+	LISTIFY(CONFIG_BT_CTLR_USER_EVT_RANGE, DEFINE_NODE_RX_USER_TYPE, (,), _),
 	NODE_RX_TYPE_USER_END,
 #endif /* CONFIG_BT_CTLR_USER_EXT */
 };

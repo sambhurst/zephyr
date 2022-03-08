@@ -87,26 +87,12 @@ endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_include_directories.html
 function(zephyr_include_directories)
-  foreach(arg ${ARGV})
-    if(IS_ABSOLUTE ${arg})
-      set(path ${arg})
-    else()
-      set(path ${CMAKE_CURRENT_SOURCE_DIR}/${arg})
-    endif()
-    target_include_directories(zephyr_interface INTERFACE ${path})
-  endforeach()
+  target_include_directories(zephyr_interface INTERFACE ${ARGV})
 endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_include_directories.html
 function(zephyr_system_include_directories)
-  foreach(arg ${ARGV})
-    if(IS_ABSOLUTE ${arg})
-      set(path ${arg})
-    else()
-      set(path ${CMAKE_CURRENT_SOURCE_DIR}/${arg})
-    endif()
-    target_include_directories(zephyr_interface SYSTEM INTERFACE ${path})
-  endforeach()
+  target_include_directories(zephyr_interface SYSTEM INTERFACE ${ARGV})
 endfunction()
 
 # https://cmake.org/cmake/help/latest/command/target_compile_definitions.html
@@ -3683,7 +3669,7 @@ endmacro()
 #
 #
 # Define an output section which will set up an iterable area
-# of equally-sized data structures. For use with Z_STRUCT_SECTION_ITERABLE.
+# of equally-sized data structures. For use with STRUCT_SECTION_ITERABLE.
 # Input sections will be sorted by name in lexicographical order.
 #
 # Each list for an input section will define the following linker symbols:

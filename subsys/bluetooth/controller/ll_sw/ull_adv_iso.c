@@ -36,6 +36,7 @@
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
 #include "ull_chan_internal.h"
+#include "ull_sched_internal.h"
 
 #include "ll.h"
 #include "ll_feat.h"
@@ -48,12 +49,11 @@
 static int init_reset(void);
 static struct ll_adv_iso_set *adv_iso_get(uint8_t handle);
 static struct stream *adv_iso_stream_acquire(void);
-static struct lll_adv_iso_stream *adv_iso_stream_get(uint16_t handle);
 static uint16_t adv_iso_stream_handle_get(struct lll_adv_iso_stream *stream);
 static uint8_t ptc_calc(const struct lll_adv_iso *lll, uint32_t latency_pdu,
 			uint32_t latency_packing, uint32_t ctrl_spacing);
 static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
-			      uint32_t ticks_anchor, uint32_t iso_interval_us);
+			      uint32_t iso_interval_us);
 static uint8_t adv_iso_chm_update(uint8_t big_handle);
 static void adv_iso_chm_complete_commit(struct lll_adv_iso *lll_iso);
 static void mfy_iso_offset_get(void *param);
@@ -93,7 +93,6 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 	struct pdu_adv *pdu_prev, *pdu;
 	struct pdu_big_info *big_info;
 	uint8_t pdu_big_info_size;
-	uint32_t ticks_anchor_iso;
 	uint32_t iso_interval_us;
 	memq_link_t *link_cmplt;
 	memq_link_t *link_term;
@@ -204,6 +203,16 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 
 		stream = (void *)adv_iso_stream_acquire();
 		stream->big_handle = big_handle;
+
+		if (!stream->link_tx_free) {
+			stream->link_tx_free = &stream->link_tx;
+		}
+		memq_init(stream->link_tx_free, &stream->memq_tx.head,
+			  &stream->memq_tx.tail);
+		stream->link_tx_free = NULL;
+
+		stream->pkt_seq_num = 0U;
+
 		lll_adv_iso->stream_handle[i] =
 			adv_iso_stream_handle_get(stream);
 	}
@@ -302,7 +311,7 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 	 * or integer multiple of SDU interval for unframed PDUs
 	 */
 	iso_interval_us = ((sdu_interval * lll_adv_iso->bn) /
-			   (bn * CONN_INT_UNIT_US)) * CONN_INT_UNIT_US;
+			   (bn * PERIODIC_INT_UNIT_US)) * PERIODIC_INT_UNIT_US;
 
 	/* Allocate next PDU */
 	err = ull_adv_sync_pdu_alloc(adv, ULL_ADV_PDU_EXTRA_DATA_ALLOC_IF_EXIST,
@@ -341,7 +350,7 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 	 */
 
 	big_info->iso_interval =
-		sys_cpu_to_le16(iso_interval_us / CONN_INT_UNIT_US);
+		sys_cpu_to_le16(iso_interval_us / PERIODIC_INT_UNIT_US);
 	big_info->num_bis = lll_adv_iso->num_bis;
 	big_info->nse = lll_adv_iso->nse;
 	big_info->bn = lll_adv_iso->bn;
@@ -378,8 +387,7 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 	lll_hdr_init(lll_adv_iso, adv_iso);
 
 	/* Start sending BIS empty data packet for each BIS */
-	ticks_anchor_iso = ticker_ticks_now_get();
-	ret = adv_iso_start(adv_iso, ticks_anchor_iso, iso_interval_us);
+	ret = adv_iso_start(adv_iso, iso_interval_us);
 	if (ret) {
 		/* FIXME: release resources */
 		return BT_HCI_ERR_CMD_DISALLOWED;
@@ -676,6 +684,20 @@ struct ll_adv_iso_set *ull_adv_iso_by_stream_get(uint16_t handle)
 	return adv_iso_get(stream_pool[handle].big_handle);
 }
 
+struct lll_adv_iso_stream *ull_adv_iso_stream_get(uint16_t handle)
+{
+	if (handle >= CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT) {
+		return NULL;
+	}
+
+	return &stream_pool[handle];
+}
+
+struct lll_adv_iso_stream *ull_adv_iso_lll_stream_get(uint16_t handle)
+{
+	return ull_adv_iso_stream_get(handle);
+}
+
 void ull_adv_iso_stream_release(struct ll_adv_iso_set *adv_iso)
 {
 	struct lll_adv_iso *lll;
@@ -683,10 +705,18 @@ void ull_adv_iso_stream_release(struct ll_adv_iso_set *adv_iso)
 	lll = &adv_iso->lll;
 	while (lll->num_bis--) {
 		struct lll_adv_iso_stream *stream;
+		memq_link_t *link;
 		uint16_t handle;
 
 		handle = lll->stream_handle[lll->num_bis];
-		stream = adv_iso_stream_get(handle);
+		stream = ull_adv_iso_stream_get(handle);
+
+		LL_ASSERT(!stream->link_tx_free);
+		link = memq_deinit(&stream->memq_tx.head,
+				   &stream->memq_tx.tail);
+		LL_ASSERT(link);
+		stream->link_tx_free = link;
+
 		mem_release(stream, &stream_free);
 	}
 
@@ -719,15 +749,6 @@ static struct stream *adv_iso_stream_acquire(void)
 	return mem_acquire(&stream_free);
 }
 
-static struct lll_adv_iso_stream *adv_iso_stream_get(uint16_t handle)
-{
-	if (handle >= CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT) {
-		return NULL;
-	}
-
-	return &stream_pool[handle];
-}
-
 static uint16_t adv_iso_stream_handle_get(struct lll_adv_iso_stream *stream)
 {
 	return mem_index_get(stream, stream_pool, sizeof(*stream));
@@ -750,13 +771,16 @@ static uint8_t ptc_calc(const struct lll_adv_iso *lll, uint32_t latency_pdu,
 }
 
 static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
-			      uint32_t ticks_anchor, uint32_t iso_interval_us)
+			      uint32_t iso_interval_us)
 {
 	uint32_t ticks_slot_overhead;
 	uint32_t ticks_slot_offset;
 	uint32_t volatile ret_cb;
+	uint32_t ticks_anchor;
+	uint32_t ticks_slot;
 	uint32_t slot_us;
 	uint32_t ret;
+	int err;
 
 	ull_hdr_init(&adv_iso->ull);
 
@@ -778,7 +802,14 @@ static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
 	} else {
 		ticks_slot_overhead = 0U;
 	}
-	ticks_slot_offset += HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US);
+	ticks_slot = adv_iso->ull.ticks_slot + ticks_slot_overhead;
+
+	/* Find the slot after Periodic Advertisings events */
+	err = ull_sched_after_adv_sync_slot_get(TICKER_USER_ID_THREAD,
+						ticks_slot, &ticks_anchor);
+	if (err) {
+		ticks_anchor = ticker_ticks_now_get();
+	}
 
 	/* setup to use ISO create prepare function for first radio event */
 	mfy_lll_prepare.fp = lll_adv_iso_create_prepare;
@@ -786,12 +817,10 @@ static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
 	ret_cb = TICKER_STATUS_BUSY;
 	ret = ticker_start(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_THREAD,
 			   (TICKER_ID_ADV_ISO_BASE + adv_iso->lll.handle),
-			   (ticks_anchor - ticks_slot_offset), 0U,
+			   ticks_anchor, 0U,
 			   HAL_TICKER_US_TO_TICKS(iso_interval_us),
 			   HAL_TICKER_REMAINDER(iso_interval_us),
-			   TICKER_NULL_LAZY,
-			   (adv_iso->ull.ticks_slot + ticks_slot_overhead),
-			   ticker_cb, adv_iso,
+			   TICKER_NULL_LAZY, ticks_slot, ticker_cb, adv_iso,
 			   ull_ticker_status_give, (void *)&ret_cb);
 	ret = ull_ticker_status_take(ret, &ret_cb);
 

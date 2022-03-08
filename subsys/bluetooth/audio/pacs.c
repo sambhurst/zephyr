@@ -29,7 +29,7 @@
 #include "pacs_internal.h"
 #include "unicast_server.h"
 
-#define PAC_INDICATE_TIMEOUT	K_MSEC(10)
+#define PAC_NOTIFY_TIMEOUT	K_MSEC(10)
 
 #if defined(CONFIG_BT_PAC_SNK) || defined(CONFIG_BT_PAC_SRC)
 NET_BUF_SIMPLE_DEFINE_STATIC(read_buf, CONFIG_BT_L2CAP_TX_MTU);
@@ -50,35 +50,27 @@ static void pac_data_add(struct net_buf_simple *buf, uint8_t num,
 	}
 }
 
-static ssize_t pac_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-			void *buf, uint16_t len, uint16_t offset)
+static void get_pac_records(struct bt_conn *conn, uint8_t type,
+			    struct net_buf_simple *buf)
 {
 	struct bt_pacs_read_rsp *rsp;
-	uint8_t type;
-	int err;
 
 	/* Reset if buffer before using */
-	net_buf_simple_reset(&read_buf);
+	net_buf_simple_reset(buf);
 
 	rsp = net_buf_simple_add(&read_buf, sizeof(*rsp));
 	rsp->num_pac = 0;
 
-	if (!bt_uuid_cmp(attr->uuid, BT_UUID_PACS_SNK)) {
-		type = BT_AUDIO_SINK;
-	} else {
-		type = BT_AUDIO_SOURCE;
-	}
-
 	if (unicast_server_cb == NULL ||
 	    unicast_server_cb->publish_capability == NULL) {
-		return bt_gatt_attr_read(conn, attr, buf, len, offset,
-					 read_buf.data, read_buf.len);
+		return;
 	}
 
 	while (true) {
+		struct bt_pac_meta *meta;
 		struct bt_codec codec;
 		struct bt_pac *pac;
-		struct bt_pac_meta *meta;
+		int err;
 
 		err = unicast_server_cb->publish_capability(conn, type,
 							    rsp->num_pac,
@@ -113,6 +105,20 @@ static ssize_t pac_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 
 		rsp->num_pac++;
 	}
+}
+
+static ssize_t pac_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+			void *buf, uint16_t len, uint16_t offset)
+{
+	uint8_t type;
+
+	if (!bt_uuid_cmp(attr->uuid, BT_UUID_PACS_SNK)) {
+		type = BT_AUDIO_SINK;
+	} else {
+		type = BT_AUDIO_SOURCE;
+	}
+
+	get_pac_records(conn, type, &read_buf);
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, read_buf.data,
 				 read_buf.len);
@@ -292,7 +298,7 @@ BT_GATT_SERVICE_DEFINE(pacs_svc,
 #endif /* CONFIG_BT_PAC_SNK */
 #if defined(CONFIG_BT_PAC_SRC)
 	BT_GATT_CHARACTERISTIC(BT_UUID_PACS_SRC,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_INDICATE,
+			       BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ_ENCRYPT,
 			       src_read, NULL, NULL),
 	BT_GATT_CCC(src_cfg_changed,
@@ -337,26 +343,35 @@ static struct k_work_delayable *bt_pacs_get_work(uint8_t type)
 	return NULL;
 }
 
-static void pac_indicate(struct k_work *work)
+static void pac_notify(struct k_work *work)
 {
 #if defined(CONFIG_BT_PAC_SNK) || defined(CONFIG_BT_PAC_SRC)
-	struct bt_gatt_indicate_params params;
+	struct bt_uuid *uuid;
+	uint8_t type;
+	int err;
 
 #if defined(CONFIG_BT_PAC_SNK)
 	if (work == &snks_work.work) {
-		params.uuid = BT_UUID_PACS_SNK;
+		type = BT_AUDIO_SINK;
+		uuid = BT_UUID_PACS_SNK;
 	}
 #endif /* CONFIG_BT_PAC_SNK */
 
 #if defined(CONFIG_BT_PAC_SRC)
 	if (work == &srcs_work.work) {
-		params.uuid = BT_UUID_PACS_SRC;
+		type = BT_AUDIO_SOURCE;
+		uuid = BT_UUID_PACS_SRC;
 	}
 #endif /* CONFIG_BT_PAC_SRC */
 
-	params.attr = pacs_svc.attrs;
+	/* TODO: We can skip this if we are not connected to any devices */
+	get_pac_records(NULL, type, &read_buf);
 
-	bt_gatt_indicate(NULL, &params);
+	err = bt_gatt_notify_uuid(NULL, uuid, pacs_svc.attrs, read_buf.data,
+				  read_buf.len);
+	if (err != 0) {
+		BT_WARN("PACS notify failed: %d", err);
+	}
 #endif /* CONFIG_BT_PAC_SNK || CONFIG_BT_PAC_SRC */
 }
 
@@ -371,10 +386,10 @@ void bt_pacs_add_capability(uint8_t type)
 
 	/* Initialize handler if it hasn't been initialized */
 	if (!work->work.handler) {
-		k_work_init_delayable(work, pac_indicate);
+		k_work_init_delayable(work, pac_notify);
 	}
 
-	k_work_reschedule(work, PAC_INDICATE_TIMEOUT);
+	k_work_reschedule(work, PAC_NOTIFY_TIMEOUT);
 }
 
 void bt_pacs_remove_capability(uint8_t type)
@@ -386,5 +401,5 @@ void bt_pacs_remove_capability(uint8_t type)
 		return;
 	}
 
-	k_work_reschedule(work, PAC_INDICATE_TIMEOUT);
+	k_work_reschedule(work, PAC_NOTIFY_TIMEOUT);
 }
