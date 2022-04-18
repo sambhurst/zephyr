@@ -7,7 +7,7 @@
 # PinMux options
 #
 menuconfig PINMUX
-	bool "Enable board pinmux driver"
+	bool "Board pinmux driver"
 
 if PINMUX
 
@@ -43,10 +43,6 @@ source "drivers/pinmux/Kconfig.mcux"
 source "drivers/pinmux/Kconfig.mcux_lpc"
 
 source "drivers/pinmux/Kconfig.rv32m1"
-
-source "drivers/pinmux/Kconfig.sifive"
-
-source "drivers/pinmux/Kconfig.sam0"
 
 source "drivers/pinmux/Kconfig.stm32"
 

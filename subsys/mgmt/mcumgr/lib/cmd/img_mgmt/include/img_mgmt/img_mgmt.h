@@ -10,6 +10,7 @@
 #include <inttypes.h>
 #include "img_mgmt_config.h"
 #include "mgmt/mgmt.h"
+#include <zcbor_common.h>
 
 struct image_version;
 
@@ -64,10 +65,8 @@ struct img_mgmt_upload_req {
 	unsigned long long image;	/* 0 by default */
 	unsigned long long off;		/* -1 if unspecified */
 	unsigned long long size;	/* -1 if unspecified */
-	size_t data_len;
-	size_t data_sha_len;
-	uint8_t img_data[CONFIG_IMG_MGMT_UL_CHUNK_SIZE];
-	uint8_t data_sha[IMG_MGMT_DATA_SHA_LEN];
+	struct zcbor_string img_data;
+	struct zcbor_string data_sha;
 	bool upgrade;			/* Only allow greater version numbers. */
 };
 
@@ -100,6 +99,10 @@ struct img_mgmt_upload_action {
 	bool proceed;
 	/** Whether to erase the destination flash area. */
 	bool erase;
+#ifdef CONFIG_IMG_MGMT_VERBOSE_ERR
+	/** "rsn" string to be sent as explanation for "rc" code */
+	const char *rc_rsn;
+#endif
 };
 
 /**
@@ -238,7 +241,9 @@ void img_mgmt_dfu_started(void);
 void img_mgmt_dfu_pending(void);
 void img_mgmt_dfu_confirmed(void);
 
-#if CONFIG_IMG_MGMT_VERBOSE_ERR
+#ifdef CONFIG_IMG_MGMT_VERBOSE_ERR
+#define IMG_MGMT_UPLOAD_ACTION_SET_RC_RSN(action, rsn) ((action)->rc_rsn = (rsn))
+#define IMG_MGMT_UPLOAD_ACTION_RC_RSN(action) ((action)->rc_rsn)
 int img_mgmt_error_rsp(struct mgmt_ctxt *ctxt, int rc, const char *rsn);
 extern const char *img_mgmt_err_str_app_reject;
 extern const char *img_mgmt_err_str_hdr_malformed;
@@ -250,16 +255,8 @@ extern const char *img_mgmt_err_str_flash_write_failed;
 extern const char *img_mgmt_err_str_downgrade;
 extern const char *img_mgmt_err_str_image_bad_flash_addr;
 #else
-#define img_mgmt_error_rsp(ctxt, rc, rsn)	(rc)
-#define img_mgmt_err_str_app_reject		NULL
-#define img_mgmt_err_str_hdr_malformed		NULL
-#define img_mgmt_err_str_magic_mismatch		NULL
-#define img_mgmt_err_str_no_slot		NULL
-#define img_mgmt_err_str_flash_open_failed	NULL
-#define img_mgmt_err_str_flash_erase_failed	NULL
-#define img_mgmt_err_str_flash_write_failed	NULL
-#define img_mgmt_err_str_downgrade		NULL
-#define img_mgmt_err_str_image_bad_flash_addr	NULL
+#define IMG_MGMT_UPLOAD_ACTION_SET_RC_RSN(action, rsn)
+#define IMG_MGMT_UPLOAD_ACTION_RC_RSN(action) NULL
 #endif
 
 #ifdef __cplusplus

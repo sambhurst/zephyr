@@ -135,6 +135,13 @@
 	status = "okay";
 };
 
+
+&dac1 {
+	pinctrl-0 = <&dac_out1_pa10>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &timers2 {
 	status = "okay";
 	pwm2: pwm {
@@ -171,10 +178,6 @@
 };
 
 &flash0 {
-	/*
-	 * For more information, see:
-	 * http://docs.zephyrproject.org/latest/guides/dts/index.html#flash-partitions
-	 */
 	partitions {
 		compatible = "fixed-partitions";
 		#address-cells = <1>;

@@ -8,7 +8,6 @@
 
 #include <drivers/clock_control.h>
 #include <kernel.h>
-#include <assert.h>
 #include <soc.h>
 #include <errno.h>
 #include <drivers/gpio.h>
@@ -303,14 +302,19 @@ static bool check_lines_high(const struct device *dev)
 	gpio_port_value_t sda = 0, scl = 0;
 
 	if (gpio_port_get_raw(data->sda_gpio, &sda)) {
-		LOG_DBG("gpio_port_get_raw for %s SDA failed", dev->name);
+		LOG_ERR("gpio_port_get_raw for %s SDA failed", dev->name);
 		return false;
 	}
 
-	if (gpio_port_get_raw(data->scl_gpio, &scl)) {
-		LOG_DBG("gpio_port_get_raw for %s SCL failed",
-			dev->name);
-		return false;
+	/* both pins could be on same GPIO group */
+	if (data->sda_gpio == data->scl_gpio) {
+		scl = sda;
+	} else {
+		if (gpio_port_get_raw(data->scl_gpio, &scl)) {
+			LOG_ERR("gpio_port_get_raw for %s SCL failed",
+				dev->name);
+			return false;
+		}
 	}
 
 	return (sda & BIT(config->sda_pos)) && (scl & BIT(config->scl_pos));
@@ -358,27 +362,18 @@ static int i2c_xec_poll_write(const struct device *dev, struct i2c_msg msg,
 	struct i2c_xec_data *data =
 		(struct i2c_xec_data *const) (dev->data);
 	uint32_t ba = config->base_addr;
-	uint8_t i2c_timer = 0, byte, error = 0;
+	uint8_t i2c_timer = 0, byte;
 	int ret;
 
 	if (data->timeout_seen == 1) {
 		/* Wait to see if the slave has released the CLK */
 		ret = wait_completion(dev);
-		switch (ret) {
-		case 0:	/* Success */
-			break;
-
-		case -ETIMEDOUT:
+		if (ret) {
 			data->timeout_seen = 1;
-			LOG_ERR("%s: %s wait_completion Timeout %d\n",
+			LOG_ERR("%s: %s wait_completion failure %d\n",
 				__func__, dev->name, ret);
 			return ret;
-
-		default:
-			error = 1;
-			break;
 		}
-
 		data->timeout_seen = 0;
 
 		/* If we are here, it means the slave has finally released
@@ -402,13 +397,6 @@ static int i2c_xec_poll_write(const struct device *dev, struct i2c_msg msg,
 			data->previously_in_read = 0;
 			byte = MCHP_I2C_SMB_DATA(ba);
 		}
-
-		if (error) {
-			LOG_DBG("%s: Recovering %s previously in error",
-				__func__, dev->name);
-			recover_from_error(dev);
-		}
-
 		return -EBUSY;
 	}
 
@@ -456,12 +444,6 @@ static int i2c_xec_poll_write(const struct device *dev, struct i2c_msg msg,
 
 		case -EIO:
 			LOG_WRN("%s: No Addr ACK from Slave 0x%x on %s",
-				__func__, addr >> 1, dev->name);
-			return ret;
-
-		case -ETIMEDOUT:
-			data->timeout_seen = 1;
-			LOG_ERR("%s: Addr Clk stretch Timeout - Slave 0x%x on %s",
 				__func__, addr >> 1, dev->name);
 			return ret;
 
@@ -525,27 +507,18 @@ static int i2c_xec_poll_read(const struct device *dev, struct i2c_msg msg,
 	struct i2c_xec_data *data =
 		(struct i2c_xec_data *const) (dev->data);
 	uint32_t ba = config->base_addr;
-	uint8_t byte, ctrl, i2c_timer = 0, error = 0;
+	uint8_t byte, ctrl, i2c_timer = 0;
 	int ret;
 
 	if (data->timeout_seen == 1) {
 		/* Wait to see if the slave has released the CLK */
 		ret = wait_completion(dev);
-		switch (ret) {
-		case 0:	/* Success */
-			break;
-
-		case -ETIMEDOUT:
+		if (ret) {
 			data->timeout_seen = 1;
-			LOG_ERR("%s: %s wait_completion Timeout %d\n",
+			LOG_ERR("%s: %s wait_completion failure %d\n",
 				__func__, dev->name, ret);
 			return ret;
-
-		default:
-			error = 1;
-			break;
 		}
-
 		data->timeout_seen = 0;
 
 		/* If we are here, it means the slave has finally released
@@ -559,12 +532,6 @@ static int i2c_xec_poll_read(const struct device *dev, struct i2c_msg msg,
 					MCHP_I2C_SMB_CTRL_STO |
 					MCHP_I2C_SMB_CTRL_ACK;
 		k_busy_wait(BUS_IDLE_US_DFLT);
-
-		if (error) {
-			LOG_DBG("%s: Recovering %s previously in error",
-				__func__, dev->name);
-			recover_from_error(dev);
-		}
 		return -EBUSY;
 	}
 
@@ -719,10 +686,9 @@ static int i2c_xec_transfer(const struct device *dev, struct i2c_msg *msgs,
 	return 0;
 }
 
-static void i2c_xec_bus_isr(void *arg)
+static void i2c_xec_bus_isr(const struct device *dev)
 {
 #ifdef CONFIG_I2C_SLAVE
-	struct device *dev = (struct device *)arg;
 	const struct i2c_xec_config *config =
 		(const struct i2c_xec_config *const) (dev->config);
 	struct i2c_xec_data *data = dev->data;
@@ -898,9 +864,6 @@ static int i2c_xec_init(const struct device *dev)
 		LOG_ERR("%s configure failed to bind SCL GPIO", dev->name);
 		return -ENXIO;
 	}
-
-	__ASSERT(data->sda_gpio != data->scl_gpio,
-				"Both i2c pins on same GPIO");
 
 	/* Default configuration */
 	ret = i2c_xec_configure(dev,

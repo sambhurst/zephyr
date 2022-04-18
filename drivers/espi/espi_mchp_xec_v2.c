@@ -24,7 +24,7 @@
 #define ESPI_XEC_VWIRE_ACK_DELAY	10ul
 
 /* Maximum timeout to transmit a virtual wire packet.
- * 10 ms expresed in multiples of 100us
+ * 10 ms expressed in multiples of 100us
  */
 #define ESPI_XEC_VWIRE_SEND_TIMEOUT	100ul
 
@@ -72,7 +72,7 @@ LOG_MODULE_REGISTER(espi, CONFIG_ESPI_LOG_LEVEL);
 #define XEC_PCR_REG_BASE						\
 	((struct pcr_regs *)(DT_REG_ADDR(DT_NODELABEL(pcr))))
 
-/* Microchip cannonical virtual wire mapping
+/* Microchip canonical virtual wire mapping
  * ------------------------------------------------------------------------|
  * VW Idx | VW reg | SRC_ID3      | SRC_ID2      | SRC_ID1   | SRC_ID0     |
  * ------------------------------------------------------------------------|
@@ -236,7 +236,7 @@ static int espi_xec_configure(const struct device *dev, struct espi_cfg *cfg)
 		cap1 |= (iomode << MCHP_ESPI_GBL_CAP1_IO_MODE_POS);
 	}
 
-	/* Validdate and translate eSPI API channels to MEC capabilities */
+	/* Validate and translate eSPI API channels to MEC capabilities */
 	cap0 &= ~MCHP_ESPI_GBL_CAP0_MASK;
 	if (cfg->channel_caps & ESPI_CHANNEL_PERIPHERAL) {
 		if (IS_ENABLED(CONFIG_ESPI_PERIPHERAL_CHANNEL)) {
@@ -851,6 +851,16 @@ static void espi_pc_isr(const struct device *dev)
 {
 	struct espi_iom_regs *regs = ESPI_XEC_REG_BASE(dev);
 	uint32_t status = regs->PCSTS;
+	struct espi_event evt = { .evt_type = ESPI_BUS_EVENT_CHANNEL_READY,
+				  .evt_details = ESPI_CHANNEL_PERIPHERAL,
+				  .evt_data = 0 };
+	struct espi_xec_data *data = (struct espi_xec_data *)(dev->data);
+
+	LOG_DBG("%s %x", __func__, status);
+	if (status & MCHP_ESPI_PC_STS_BUS_ERR) {
+		LOG_ERR("%s bus error", __func__);
+		regs->PCSTS = MCHP_ESPI_PC_STS_BUS_ERR;
+	}
 
 	if (status & MCHP_ESPI_PC_STS_EN_CHG) {
 		if (status & MCHP_ESPI_PC_STS_EN) {
@@ -858,6 +868,16 @@ static void espi_pc_isr(const struct device *dev)
 		}
 
 		regs->PCSTS = MCHP_ESPI_PC_STS_EN_CHG;
+	}
+
+	if (status & MCHP_ESPI_PC_STS_BM_EN_CHG) {
+		if (status & MCHP_ESPI_PC_STS_BM_EN) {
+			evt.evt_data = ESPI_PC_EVT_BUS_MASTER_ENABLE;
+			LOG_WRN("%s BM change %x", __func__, status);
+			espi_send_callbacks(&data->callbacks, dev, evt);
+		}
+
+		regs->PCSTS = MCHP_ESPI_PC_STS_BM_EN_CHG;
 	}
 
 	xec_espi_bus_intr_clr(dev, pc_girq_idx);

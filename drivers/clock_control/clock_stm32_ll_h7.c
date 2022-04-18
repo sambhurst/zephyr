@@ -39,7 +39,7 @@
 #define z_apb4_prescaler(v) LL_RCC_APB4_DIV_ ## v
 #define apb4_prescaler(v) z_apb4_prescaler(v)
 
-/* Macro to check for clock feasability */
+/* Macro to check for clock feasibility */
 /* It is Cortex M7's responsibility to setup clock tree */
 /* This check should only be performed for the M7 core code */
 #ifdef CONFIG_CPU_CORTEX_M7
@@ -594,17 +594,17 @@ static int set_up_plls(void)
 
 	LL_RCC_PLL3FRACN_Disable();
 
-	if (IS_ENABLED(STM32_PLL3_P_ENABLE)) {
+	if (IS_ENABLED(STM32_PLL3_P_ENABLED)) {
 		LL_RCC_PLL3_SetP(STM32_PLL3_P_DIVISOR);
 		LL_RCC_PLL3P_Enable();
 	}
 
-	if (IS_ENABLED(STM32_PLL3_Q_ENABLE)) {
+	if (IS_ENABLED(STM32_PLL3_Q_ENABLED)) {
 		LL_RCC_PLL3_SetQ(STM32_PLL3_Q_DIVISOR);
 		LL_RCC_PLL3Q_Enable();
 	}
 
-	if (IS_ENABLED(STM32_PLL3_R_ENABLE)) {
+	if (IS_ENABLED(STM32_PLL3_R_ENABLED)) {
 		LL_RCC_PLL3_SetR(STM32_PLL3_R_DIVISOR);
 		LL_RCC_PLL3R_Enable();
 	}
