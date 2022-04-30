@@ -16,6 +16,12 @@
  */
 
 /**
+ * Test bitrates in bits/second.
+ */
+#define TEST_BITRATE_1 125000
+#define TEST_BITRATE_2 250000
+
+/**
  * @brief Test timeouts.
  */
 #define TEST_SEND_TIMEOUT    K_MSEC(100)
@@ -635,6 +641,17 @@ static void test_set_bitrate_too_high(void)
 }
 
 /**
+ * @brief Test setting bitrate.
+ */
+static void test_set_bitrate(void)
+{
+	int err;
+
+	err = can_set_bitrate(can_dev, TEST_BITRATE_1, 0);
+	zassert_equal(err, 0, "failed to set bitrate");
+}
+
+/**
  * @brief Test configuring the CAN controller for loopback mode.
  *
  * This test case must be run before sending/receiving test cases as it allows
@@ -685,6 +702,69 @@ static void test_add_filter(void)
 
 	filter_id = add_rx_filter(can_dev, &test_ext_masked_filter_1, rx_ext_mask_callback_1);
 	can_remove_rx_filter(can_dev, filter_id);
+}
+
+/**
+ * @brief Test adding up to and above the maximum number of RX filters.
+ *
+ * @param id_type CAN frame identifier type
+ * @param id_mask filter
+ */
+static void add_remove_max_filters(enum can_ide id_type)
+{
+	uint32_t id_mask = id_type == CAN_STANDARD_IDENTIFIER ? CAN_STD_ID_MASK : CAN_EXT_ID_MASK;
+	struct zcan_filter filter = {
+		.id_type = id_type,
+		.rtr = CAN_DATAFRAME,
+		.id = 0,
+		.rtr_mask = 1,
+		.id_mask = id_mask,
+	};
+	int filter_id;
+	int max;
+	int i;
+
+	max = can_get_max_filters(can_dev, id_type);
+	if (max == -ENOSYS || max == 0) {
+		/*
+		 * Skip test if max is not known or no filters of the given type
+		 * is supported.
+		 */
+		ztest_test_skip();
+	}
+
+	zassert_true(max > 0, "failed to get max filters (err %d)", max);
+
+	int filter_ids[max];
+
+	for (i = 0; i < max; i++) {
+		filter.id++;
+		filter_ids[i] = add_rx_msgq(can_dev, &filter);
+	}
+
+	filter.id++;
+	filter_id = can_add_rx_filter_msgq(can_dev, &can_msgq, &filter);
+	zassert_equal(filter_id, -ENOSPC, "added more than max filters");
+
+	for (i = 0; i < max; i++) {
+		can_remove_rx_filter(can_dev, filter_ids[i]);
+	}
+}
+
+/**
+ * @brief Test max standard (11-bit) CAN RX filters.
+ */
+static void test_max_std_filters(void)
+{
+	add_remove_max_filters(CAN_STANDARD_IDENTIFIER);
+}
+
+/**
+ * @brief Test max extended (29-bit) CAN RX filters.
+ */
+static void test_max_ext_filters(void)
+{
+	add_remove_max_filters(CAN_EXTENDED_IDENTIFIER);
 }
 
 /**
@@ -888,6 +968,34 @@ static void test_filters_preserved_through_mode_change(void)
 	can_remove_rx_filter(can_dev, filter_id);
 }
 
+static void test_filters_preserved_through_bitrate_change(void)
+{
+	struct zcan_frame frame;
+	int filter_id;
+	int err;
+
+	filter_id = add_rx_msgq(can_dev, &test_std_filter_1);
+	send_test_frame(can_dev, &test_std_frame_1);
+
+	err = k_msgq_get(&can_msgq, &frame, TEST_RECEIVE_TIMEOUT);
+	zassert_equal(err, 0, "receive timeout");
+	assert_frame_equal(&frame, &test_std_frame_1, 0);
+
+	err = can_set_bitrate(can_dev, TEST_BITRATE_2, 0);
+	zassert_equal(err, 0, "failed to set bitrate");
+
+	err = can_set_bitrate(can_dev, TEST_BITRATE_1, 0);
+	zassert_equal(err, 0, "failed to set bitrate");
+
+	send_test_frame(can_dev, &test_std_frame_1);
+
+	err = k_msgq_get(&can_msgq, &frame, TEST_RECEIVE_TIMEOUT);
+	zassert_equal(err, 0, "receive timeout");
+	assert_frame_equal(&frame, &test_std_frame_1, 0);
+
+	can_remove_rx_filter(can_dev, filter_id);
+}
+
 void test_main(void)
 {
 	k_sem_init(&rx_callback_sem, 0, 2);
@@ -903,9 +1011,12 @@ void test_main(void)
 			 ztest_user_unit_test(test_get_core_clock),
 			 ztest_unit_test(test_set_state_change_callback),
 			 ztest_user_unit_test(test_set_bitrate_too_high),
+			 ztest_user_unit_test(test_set_bitrate),
 			 ztest_user_unit_test(test_set_loopback),
 			 ztest_user_unit_test(test_send_and_forget),
 			 ztest_unit_test(test_add_filter),
+			 ztest_user_unit_test(test_max_std_filters),
+			 ztest_user_unit_test(test_max_ext_filters),
 			 ztest_user_unit_test(test_receive_timeout),
 			 ztest_unit_test(test_send_callback),
 			 ztest_unit_test(test_send_receive_std_id),
@@ -917,6 +1028,7 @@ void test_main(void)
 			 ztest_unit_test(test_send_receive_wrong_id),
 			 ztest_user_unit_test(test_recover),
 			 ztest_user_unit_test(test_get_state),
-			 ztest_user_unit_test(test_filters_preserved_through_mode_change));
+			 ztest_user_unit_test(test_filters_preserved_through_mode_change),
+			 ztest_user_unit_test(test_filters_preserved_through_bitrate_change));
 	ztest_run_test_suite(can_api_tests);
 }

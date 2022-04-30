@@ -39,14 +39,14 @@ void log_msgs(void)
 #ifndef CONFIG_LOG2
 	struct log_msg_ids src_level = {
 		.level = LOG_LEVEL_INTERNAL_RAW_STRING,
-		.source_id = 0, /* not used as level indicates raw string. */
 		.domain_id = 0, /* not used as level indicates raw string. */
+		.source_id = 0, /* not used as level indicates raw string. */
 	};
 #endif
 
 	char c = '!';
-	char *s = "static str";
-	char *s1 = "c str";
+	const char *s = "static str";
+	const char *s1 = "c str";
 	char vs0[32];
 	char vs1[32];
 
@@ -106,6 +106,15 @@ void log_msgs(void)
 	log_string_sync(src_level, "%s", "log string sync");
 #endif
 
+#if CONFIG_LOG_MODE_DEFERRED
+	/*
+	 * When deferred logging is enabled, the work is being performed by
+	 * another thread. This k_sleep() gives that thread time to process
+	 * those messages.
+	 */
+
+	k_sleep(K_TICKS(10));
+#endif
 }
 
 void main(void)
@@ -116,14 +125,20 @@ void main(void)
 
 	uint32_t log_type = LOG_OUTPUT_TEXT;
 
-	log_backend_format_set(log_backend_get_by_name("log_backend_uart"), log_type);
+	log_format_set_all_active_backends(log_type);
 
 	log_msgs();
 
 	log_type = LOG_OUTPUT_SYST;
-	log_backend_format_set(log_backend_get_by_name("log_backend_uart"), log_type);
+	log_format_set_all_active_backends(log_type);
 
 	log_msgs();
+
+	log_type = LOG_OUTPUT_TEXT;
+	log_format_set_all_active_backends(log_type);
+
+	/* raw string */
+	printk("SYST Sample Execution Completed\n");
 #endif
 
 }

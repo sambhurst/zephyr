@@ -62,6 +62,8 @@ static inline uint8_t *modem_get_mac(const struct device *dev)
 	return data->mac_addr;
 }
 
+static int offload_socket(int family, int type, int proto);
+
 /* Setup the Modem NET Interface. */
 static void modem_net_iface_init(struct net_if *iface)
 {
@@ -73,6 +75,8 @@ static void modem_net_iface_init(struct net_if *iface)
 	data->netif = iface;
 
 	socket_offload_dns_register(&offload_dns_ops);
+
+	net_if_socket_offload_set(iface, offload_socket);
 }
 
 /**
@@ -2395,5 +2399,5 @@ NET_DEVICE_DT_INST_OFFLOAD_DEFINE(0, modem_init, NULL, &mdata, NULL,
 				  CONFIG_MODEM_SIMCOM_SIM7080_INIT_PRIORITY, &api_funcs,
 				  MDM_MAX_DATA_LENGTH);
 
-NET_SOCKET_REGISTER(simcom_sim7080, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY, AF_UNSPEC,
-		    offload_is_supported, offload_socket);
+NET_SOCKET_OFFLOAD_REGISTER(simcom_sim7080, CONFIG_NET_SOCKETS_OFFLOAD_PRIORITY,
+			    AF_UNSPEC, offload_is_supported, offload_socket);

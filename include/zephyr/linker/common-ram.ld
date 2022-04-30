@@ -45,6 +45,13 @@
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 #endif
 
+#if defined(CONFIG_HAS_DYNAMIC_DEVICE_HANDLES)
+	SECTION_DATA_PROLOGUE(device_handles,,)
+	{
+#include "device-handles.ld"
+	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
+#endif 	/* CONFIG_HAS_DYNAMIC_DEVICE_HANDLES */
+
 	SECTION_DATA_PROLOGUE(initshell,,)
 	{
 		/* link in shell initialization objects for all modules that

@@ -118,7 +118,7 @@ Use the following macros for adding shell commands:
 * :c:macro:`SHELL_DYNAMIC_CMD_CREATE` - Create a dynamic subcommands array.
 
 Commands can be created in any file in the system that includes
-:zephyr_file:`include/shell/shell.h`. All created commands are available for all
+:zephyr_file:`include/zephyr/shell/shell.h`. All created commands are available for all
 shell instances.
 
 Static commands
@@ -263,7 +263,7 @@ Commands execution
 Each command or subcommand may have a handler. The shell executes the handler
 that is found deepest in the command tree and further subcommands (without a
 handler) are passed as arguments. Characters within parentheses are treated
-as one argument. If shell wont find a handler it will display an error message.
+as one argument. If shell won't find a handler it will display an error message.
 
 Commands can be also executed from a user application using any active backend
 and a function :c:func:`shell_execute_cmd`, as shown in this example:

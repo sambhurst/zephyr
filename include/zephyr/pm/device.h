@@ -7,7 +7,7 @@
 #ifndef ZEPHYR_INCLUDE_PM_DEVICE_H_
 #define ZEPHYR_INCLUDE_PM_DEVICE_H_
 
-#include <device.h>
+#include <zephyr/device.h>
 #include <kernel.h>
 #include <sys/atomic.h>
 
@@ -41,6 +41,8 @@ enum pm_device_flag {
 	PM_DEVICE_FLAG_RUNTIME_ENABLED,
 	/** Indicates if the device pm is locked.  */
 	PM_DEVICE_FLAG_STATE_LOCKED,
+	/** Indicateds if the device is used as a power domain */
+	PM_DEVICE_FLAG_PD,
 };
 
 /** @endcond */
@@ -176,8 +178,10 @@ struct pm_device {
 		.state = PM_DEVICE_STATE_ACTIVE,			\
 		.flags = ATOMIC_INIT(COND_CODE_1(			\
 				DT_NODE_EXISTS(node_id),		\
-				(DT_PROP_OR(node_id, wakeup_source, 0)),\
-				(0)) << PM_DEVICE_FLAG_WS_CAPABLE),	\
+				((DT_PROP_OR(node_id, wakeup_source, 0) \
+				  << PM_DEVICE_FLAG_WS_CAPABLE) |	\
+				 (DT_NODE_HAS_COMPAT(node_id, power_domain) << \
+				  PM_DEVICE_FLAG_PD)), (0))),		\
 		Z_PM_DEVICE_POWER_DOMAIN_INIT(node_id)			\
 	}
 
@@ -201,7 +205,7 @@ struct pm_device {
  */
 #define Z_PM_DEVICE_DEFINE_SLOT(dev_name)				\
 	static const Z_DECL_ALIGN(struct device *)			\
-	_CONCAT(Z_PM_DEVICE_NAME(dev_name), slot) __used		\
+	_CONCAT(Z_PM_DEVICE_NAME(dev_name), _slot) __used		\
 	__attribute__((__section__(".z_pm_device_slots")))
 
 #ifdef CONFIG_PM_DEVICE
@@ -521,6 +525,36 @@ bool pm_device_state_is_locked(const struct device *dev);
  */
 bool pm_device_on_power_domain(const struct device *dev);
 
+/**
+ * @brief Add a device to a power domain.
+ *
+ * This function adds a device to a given power domain.
+ *
+ * @param dev Device to be added to the power domain.
+ * @param domain Power domain.
+ *
+ * @retval 0 If successful.
+ * @retval -EALREADY If device is already part of the power domain.
+ * @retval -ENOSYS If the application was built without power domain support.
+ * @retval -ENOSPC If there is no space available in the power domain to add the device.
+ */
+int pm_device_power_domain_add(const struct device *dev,
+			       const struct device *domain);
+
+/**
+ * @brief Remove a device from a power domain.
+ *
+ * This function removes a device from a given power domain.
+ *
+ * @param dev Device to be removed from the power domain.
+ * @param domain Power domain.
+ *
+ * @retval 0 If successful.
+ * @retval -ENOSYS If the application was built without power domain support.
+ * @retval -ENOENT If device is not in the given domain.
+ */
+int pm_device_power_domain_remove(const struct device *dev,
+				  const struct device *domain);
 #else
 static inline void pm_device_init_suspended(const struct device *dev)
 {
@@ -579,6 +613,19 @@ static inline bool pm_device_on_power_domain(const struct device *dev)
 	ARG_UNUSED(dev);
 	return false;
 }
+
+static inline int pm_device_power_domain_add(const struct device *dev,
+					     const struct device *domain)
+{
+	return -ENOSYS;
+}
+
+static inline int pm_device_power_domain_remove(const struct device *dev,
+						const struct device *domain)
+{
+	return -ENOSYS;
+}
+
 #endif /* CONFIG_PM_DEVICE */
 
 /** @} */

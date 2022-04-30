@@ -2277,6 +2277,8 @@ class CMake():
         self.generator = None
         self.generator_cmd = None
 
+        self.default_encoding = sys.getdefaultencoding()
+
     def parse_generated(self):
         self.defconfig = {}
         return {}
@@ -2310,8 +2312,8 @@ class CMake():
             results = {'msg': msg, "returncode": p.returncode, "instance": self.instance}
 
             if out:
-                log_msg = out.decode(sys.getdefaultencoding())
-                with open(os.path.join(self.build_dir, self.log), "a") as log:
+                log_msg = out.decode(self.default_encoding)
+                with open(os.path.join(self.build_dir, self.log), "a", encoding=self.default_encoding) as log:
                     log.write(log_msg)
 
             else:
@@ -2320,8 +2322,8 @@ class CMake():
             # A real error occurred, raise an exception
             log_msg = ""
             if out:
-                log_msg = out.decode(sys.getdefaultencoding())
-                with open(os.path.join(self.build_dir, self.log), "a") as log:
+                log_msg = out.decode(self.default_encoding)
+                with open(os.path.join(self.build_dir, self.log), "a", encoding=self.default_encoding) as log:
                     log.write(log_msg)
 
             if log_msg:
@@ -2401,8 +2403,8 @@ class CMake():
             results = {"returncode": p.returncode}
 
         if out:
-            with open(os.path.join(self.build_dir, self.log), "a") as log:
-                log_msg = out.decode(sys.getdefaultencoding())
+            with open(os.path.join(self.build_dir, self.log), "a", encoding=self.default_encoding) as log:
+                log_msg = out.decode(self.default_encoding)
                 log.write(log_msg)
 
         return results
@@ -2958,6 +2960,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                        "slow": {"type": "bool", "default": False},
                        "timeout": {"type": "int", "default": 60},
                        "min_ram": {"type": "int", "default": 8},
+                       "modules": {"type": "list", "default": []},
                        "depends_on": {"type": "set"},
                        "min_flash": {"type": "int", "default": 32},
                        "arch_allow": {"type": "set"},
@@ -3042,6 +3045,8 @@ class TestSuite(DisablePyTestCollectionMixin):
 
         self.pipeline = None
         self.version = "NA"
+
+        self.modules = []
 
     def check_zephyr_version(self):
         try:
@@ -3336,6 +3341,7 @@ class TestSuite(DisablePyTestCollectionMixin):
                         tc.build_on_all = tc_dict["build_on_all"]
                         tc.slow = tc_dict["slow"]
                         tc.min_ram = tc_dict["min_ram"]
+                        tc.modules = tc_dict["modules"]
                         tc.depends_on = tc_dict["depends_on"]
                         tc.min_flash = tc_dict["min_flash"]
                         tc.extra_sections = tc_dict["extra_sections"]
@@ -3532,6 +3538,10 @@ class TestSuite(DisablePyTestCollectionMixin):
                 if (plat.arch == "unit") != (tc.type == "unit"):
                     # Discard silently
                     continue
+
+                if tc.modules and self.modules:
+                    if not set(tc.modules).issubset(set(self.modules)):
+                        discards[instance] = discards.get(instance, f"one or more required module not available: {','.join(tc.modules)}")
 
                 if runnable and not instance.run:
                     discards[instance] = discards.get(instance, "Not runnable on device")

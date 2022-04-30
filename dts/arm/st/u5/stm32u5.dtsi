@@ -7,7 +7,7 @@
 
 
 #include <arm/armv8-m.dtsi>
-#include <dt-bindings/clock/stm32_clock.h>
+#include <dt-bindings/clock/stm32u5_clock.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/i2c/i2c.h>
 #include <freq.h>
@@ -64,8 +64,9 @@
 
 		clk_lse: clk-lse {
 			#clock-cells = <0>;
-			compatible = "fixed-clock";
+			compatible = "st,stm32-lse-clock";
 			clock-frequency = <32768>;
+			driving-capability = <0>;
 			status = "disabled";
 		};
 

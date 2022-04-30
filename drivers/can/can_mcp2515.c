@@ -209,21 +209,6 @@ static int mcp2515_cmd_read_rx_buffer(const struct device *dev, uint8_t nm,
 	return spi_transceive_dt(&dev_cfg->bus, &tx, &rx);
 }
 
-static uint8_t mcp2515_convert_canmode_to_mcp2515mode(enum can_mode mode)
-{
-	switch (mode) {
-	case CAN_NORMAL_MODE:
-		return MCP2515_MODE_NORMAL;
-	case CAN_SILENT_MODE:
-		return MCP2515_MODE_SILENT;
-	case CAN_LOOPBACK_MODE:
-		return MCP2515_MODE_LOOPBACK;
-	default:
-		LOG_ERR("Unsupported CAN Mode %u", mode);
-		return MCP2515_MODE_SILENT;
-	}
-}
-
 static void mcp2515_convert_zcanframe_to_mcp2515frame(const struct zcan_frame
 						      *source, uint8_t *target)
 {
@@ -358,7 +343,7 @@ static int mcp2515_set_timing(const struct device *dev,
 
 	/* CNF3, CNF2, CNF1, CANINTE */
 	uint8_t config_buf[4];
-	uint8_t reset_mode;
+	uint8_t mode;
 
 	/* CNF1; SJW<7:6> | BRP<5:0> */
 	__ASSERT(timing->prescaler > 0, "Prescaler should be bigger than zero");
@@ -412,28 +397,15 @@ static int mcp2515_set_timing(const struct device *dev,
 
 	k_mutex_lock(&dev_data->mutex, K_FOREVER);
 
-	k_usleep(MCP2515_OSC_STARTUP_US);
-
-	/* will enter configuration mode automatically */
-	ret = mcp2515_cmd_soft_reset(dev);
+	ret = mcp2515_get_mode(dev, &mode);
 	if (ret < 0) {
-		LOG_ERR("Failed to reset the device [%d]", ret);
+		LOG_ERR("Failed to read device mode [%d]", ret);
 		goto done;
 	}
 
-	k_usleep(MCP2515_OSC_STARTUP_US);
-
-	ret = mcp2515_get_mode(dev, &reset_mode);
+	ret = mcp2515_set_mode_int(dev, MCP2515_MODE_CONFIGURATION);
 	if (ret < 0) {
-		LOG_ERR("Failed to read device mode [%d]",
-			ret);
-		goto done;
-	}
-
-	if (reset_mode != MCP2515_MODE_CONFIGURATION) {
-		LOG_ERR("Device did not reset into configuration mode [%d]",
-			reset_mode);
-		ret = -EIO;
+		LOG_ERR("Failed to enter configuration mode [%d]", ret);
 		goto done;
 	}
 
@@ -441,18 +413,28 @@ static int mcp2515_set_timing(const struct device *dev,
 				    sizeof(config_buf));
 	if (ret < 0) {
 		LOG_ERR("Failed to write the configuration [%d]", ret);
+		goto done;
 	}
 
 	ret = mcp2515_cmd_bit_modify(dev, MCP2515_ADDR_RXB0CTRL, rx0_ctrl,
 				     rx0_ctrl);
 	if (ret < 0) {
 		LOG_ERR("Failed to write RXB0CTRL [%d]", ret);
+		goto done;
 	}
 
 	ret = mcp2515_cmd_bit_modify(dev, MCP2515_ADDR_RXB1CTRL, rx1_ctrl,
 				     rx1_ctrl);
 	if (ret < 0) {
 		LOG_ERR("Failed to write RXB1CTRL [%d]", ret);
+		goto done;
+	}
+
+	/* Restore previous mode */
+	ret = mcp2515_set_mode_int(dev, mode);
+	if (ret < 0) {
+		LOG_ERR("Failed to restore mode [%d]", ret);
+		goto done;
 	}
 
 done:
@@ -464,7 +446,23 @@ static int mcp2515_set_mode(const struct device *dev, enum can_mode mode)
 {
 	const struct mcp2515_config *dev_cfg = dev->config;
 	struct mcp2515_data *dev_data = dev->data;
+	uint8_t mcp2515_mode;
 	int ret;
+
+	switch (mode) {
+	case CAN_NORMAL_MODE:
+		mcp2515_mode = MCP2515_MODE_NORMAL;
+		break;
+	case CAN_SILENT_MODE:
+		mcp2515_mode = MCP2515_MODE_SILENT;
+		break;
+	case CAN_LOOPBACK_MODE:
+		mcp2515_mode = MCP2515_MODE_LOOPBACK;
+		break;
+	default:
+		LOG_ERR("Unsupported CAN Mode %u", mode);
+		return -ENOTSUP;
+	}
 
 	k_mutex_lock(&dev_data->mutex, K_FOREVER);
 
@@ -478,8 +476,7 @@ static int mcp2515_set_mode(const struct device *dev, enum can_mode mode)
 
 	k_usleep(MCP2515_OSC_STARTUP_US);
 
-	ret = mcp2515_set_mode_int(dev,
-			mcp2515_convert_canmode_to_mcp2515mode(mode));
+	ret = mcp2515_set_mode_int(dev, mcp2515_mode);
 	if (ret < 0) {
 		LOG_ERR("Failed to set the mode [%d]", ret);
 

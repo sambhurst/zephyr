@@ -9,7 +9,7 @@
 #define ZEPHYR_INCLUDE_DRIVERS_CAN_H_
 
 #include <zephyr/types.h>
-#include <device.h>
+#include <zephyr/device.h>
 #include <string.h>
 #include <sys/util.h>
 
@@ -867,7 +867,7 @@ static inline int z_impl_can_set_mode(const struct device *dev, enum can_mode mo
  * @retval -EINVAL bitrate/sample point cannot be met.
  * @retval -EIO General input/output error, failed to set bitrate.
  */
-int can_set_bitrate(const struct device *dev, uint32_t bitrate, uint32_t bitrate_data);
+__syscall int can_set_bitrate(const struct device *dev, uint32_t bitrate, uint32_t bitrate_data);
 
 /** @} */
 
@@ -1109,6 +1109,8 @@ static inline int z_impl_can_recover(const struct device *dev, k_timeout_t timeo
 /* This implementation prevents inking errors for auto recovery */
 static inline int z_impl_can_recover(const struct device *dev, k_timeout_t timeout)
 {
+	ARG_UNUSED(dev);
+	ARG_UNUSED(timeout);
 	return 0;
 }
 #endif /* !CONFIG_CAN_AUTO_BUS_OFF_RECOVERY */

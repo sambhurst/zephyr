@@ -26,7 +26,7 @@
 #include <irq.h>
 #include <sw_isr_table.h>
 #include <soc.h>
-#include <devicetree.h>
+#include <zephyr/devicetree.h>
 #include <arch/riscv/csr.h>
 
 /* stacks, for RISCV architecture stack should be 16byte-aligned */
@@ -266,6 +266,10 @@ extern "C" {
 typedef struct {
 	uint8_t pmp_attr;
 } k_mem_partition_attr_t;
+
+struct arch_mem_domain {
+	unsigned int pmp_update_nr;
+};
 
 void arch_irq_enable(unsigned int irq);
 void arch_irq_disable(unsigned int irq);

@@ -805,6 +805,18 @@ int k_thread_cpu_mask_enable(k_tid_t thread, int cpu);
  * @return Zero on success, otherwise error code
  */
 int k_thread_cpu_mask_disable(k_tid_t thread, int cpu);
+
+/**
+ * @brief Pin a thread to a CPU
+ *
+ * Pin a thread to a CPU by first clearing the cpu mask and then enabling the
+ * thread on the selected CPU.
+ *
+ * @param thread Thread to operate upon
+ * @param cpu CPU index
+ * @return Zero on success, otherwise error code
+ */
+int k_thread_cpu_pin(k_tid_t thread, int cpu);
 #endif
 
 /**
@@ -1062,12 +1074,16 @@ __syscall int k_thread_name_copy(k_tid_t thread, char *buf,
 /**
  * @brief Get thread state string
  *
- * Get the human friendly thread state string
+ * This routine generates a human friendly string containing the thread's
+ * state, and copies as much of it as possible into @a buf.
  *
  * @param thread_id Thread ID
- * @retval Thread state string, empty if no state flag is set
+ * @param buf Buffer into which to copy state strings
+ * @param buf_size Size of the buffer
+ *
+ * @retval Pointer to @a buf if data was copied, else a pointer to "".
  */
-const char *k_thread_state_str(k_tid_t thread_id);
+const char *k_thread_state_str(k_tid_t thread_id, char *buf, size_t buf_size);
 
 /**
  * @}
