@@ -5,7 +5,7 @@
  */
 
 #include "skeleton.dtsi"
-#include <dt-bindings/interrupt-controller/intel-ioapic.h>
+#include <zephyr/dt-bindings/interrupt-controller/intel-ioapic.h>
 
 / {
 	cpus {
@@ -69,6 +69,14 @@
 			interrupt-parent = <&intc>;
 
 			status = "disabled";
+		};
+
+		counter: counter@70 {
+			label = "CMOS";
+			compatible = "motorola,mc146818";
+			reg = <0x70 0x0D 0x71 0x0D>;
+
+			status = "okay";
 		};
 	};
 };

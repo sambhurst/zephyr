@@ -1,14 +1,14 @@
 /*
- * Copyright (c) 2022, NXP
+ * Copyright 2022, NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <mem.h>
 #include <arm/armv8-m.dtsi>
-#include <dt-bindings/clock/mcux_lpc_syscon_clock.h>
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/clock/mcux_lpc_syscon_clock.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
 
 / {
 	chosen {
@@ -73,6 +73,14 @@
 		reg = <0x1000 0x1000>;
 		label = "CLKCTL_0";
 		#clock-cells = <1>;
+	};
+
+	iocon: iocon@4000 {
+		compatible = "nxp,lpc-iocon";
+		reg = <0x4000 0x1000>;
+		pinctrl: pinctrl {
+			compatible = "nxp,rt-iocon-pinctrl";
+		};
 	};
 
 	clkctl1: clkctl@21000 {

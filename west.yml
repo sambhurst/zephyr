@@ -35,7 +35,7 @@ manifest:
       revision: 094aeb41bb93e9199d24d665ee43e9e05d6d7b1c
       path: modules/lib/civetweb
     - name: cmsis
-      revision: ed63b704bbfaceb71220557b658304c5ea3d5b88
+      revision: 5f86244bad4ad5a590e084f0e72ba7a1416c2edf
       path: modules/hal/cmsis
       groups:
         - hal
@@ -70,7 +70,7 @@ manifest:
       groups:
         - hal
     - name: hal_espressif
-      revision: fb57c28853fb7b3b85457bebfcce9c63ab83cac4
+      revision: a7dc3c72291a387e0eb3b268d07df6eb70811a84
       path: modules/hal/espressif
       west-commands: west/west-commands.yml
       groups:
@@ -91,7 +91,7 @@ manifest:
       groups:
         - hal
     - name: hal_nordic
-      revision: 4464a6f96b4a6a1b7ac5ca1b8c3caf6a81d25e57
+      revision: a85bb3676d61d1ae202088e0d3fec556056b2c9e
       path: modules/hal/nordic
       groups:
         - hal
@@ -101,7 +101,7 @@ manifest:
       groups:
         - hal
     - name: hal_nxp
-      revision: 9ac27f746517a483c01df2721957c822b5bda954
+      revision: d287347745db7ccc85d267fddf3ce4f89a98ec1f
       path: modules/hal/nxp
       groups:
         - hal
@@ -127,12 +127,12 @@ manifest:
       groups:
         - hal
     - name: hal_st
-      revision: 575de9d461aa6f430cf62c58a053675377e700f3
+      revision: 52a522ca4a8a9ec1e9bb5bb514e1ab6f102863fe
       path: modules/hal/st
       groups:
         - hal
     - name: hal_stm32
-      revision: 5945d50882a5133e6cab918d1214c3be373b2c6a
+      revision: e31e840271efc9939c8650598e169aa314208bdd
       path: modules/hal/stm32
       groups:
         - hal
@@ -152,7 +152,7 @@ manifest:
       groups:
         - hal
     - name: libmetal
-      revision: c6efe091dfe02704097586a522969b5a4cc197bd
+      revision: 850a3c3fd5bc655987021dc9106d8e8cd0f7e061
       path: modules/hal/libmetal
       groups:
         - hal
@@ -198,7 +198,7 @@ manifest:
       revision: b8cea37dbdc8fc58cc14b4e19fa850877a9da520
       path: modules/bsim_hw_models/nrf_hw_models
     - name: open-amp
-      revision: cfd050ff38a9d028dc211690b2ec35971128e45e
+      revision: 8d53544871e1f300c478224faca6be8384ab0d04
       path: modules/lib/open-amp
     - name: openthread
       revision: d4d46ba94290bcf93cc849b832f0ad305c72c473
