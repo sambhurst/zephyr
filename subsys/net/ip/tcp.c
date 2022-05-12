@@ -4,21 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_tcp, CONFIG_NET_TCP_LOG_LEVEL);
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <zephyr.h>
-#include <random/rand32.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/random/rand32.h>
 
 #if defined(CONFIG_NET_TCP_ISN_RFC6528)
 #include <mbedtls/md5.h>
 #endif
-#include <net/net_pkt.h>
-#include <net/net_context.h>
-#include <net/udp.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/net_context.h>
+#include <zephyr/net/udp.h>
 #include "ipv4.h"
 #include "ipv6.h"
 #include "connection.h"
@@ -1744,10 +1744,17 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 	struct k_fifo *recv_data_fifo;
 	size_t len;
 	int ret;
+	int sndbuf_opt = 0;
 
 	if (th) {
 		/* Currently we ignore ECN and CWR flags */
 		fl = th_flags(th) & ~(ECN | CWR);
+	}
+
+	if (IS_ENABLED(CONFIG_NET_CONTEXT_SNDBUF) &&
+	    conn->state != TCP_SYN_SENT) {
+		(void)net_context_get_option(conn->context, NET_OPT_SNDBUF,
+					     &sndbuf_opt, NULL);
 	}
 
 	k_mutex_lock(&conn->lock, K_FOREVER);
@@ -1783,9 +1790,6 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 
 	if (th) {
 		size_t max_win;
-		int sndbuf;
-		size_t sndbuf_len;
-
 
 		conn->send_win = ntohs(th_win(th));
 
@@ -1802,15 +1806,8 @@ static void tcp_in(struct tcp *conn, struct net_pkt *pkt)
 				   CONFIG_NET_BUF_DATA_SIZE) / 3;
 		}
 
-		if (IS_ENABLED(CONFIG_NET_CONTEXT_SNDBUF) &&
-			conn->state != TCP_SYN_SENT &&
-			net_context_get_option(conn->context,
-					       NET_OPT_SNDBUF,
-					       &sndbuf,
-					       &sndbuf_len) == 0) {
-			if (sndbuf > 0) {
-				max_win = sndbuf;
-			}
+		if (sndbuf_opt > 0) {
+			max_win = sndbuf_opt;
 		}
 
 		max_win = MAX(max_win, NET_IPV6_MTU);

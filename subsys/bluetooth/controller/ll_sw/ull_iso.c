@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <soc.h>
 
 #include "hal/cpu.h"
@@ -813,10 +813,12 @@ static void iso_rx_cig_ref_point_update(struct ll_conn_iso_group *cig,
 
 static void iso_rx_demux(void *param)
 {
+#if defined(CONFIG_BT_CTLR_CONN_ISO)
 	struct ll_conn_iso_stream *cis;
 	struct ll_conn_iso_group *cig;
 	struct ll_iso_datapath *dp;
 	struct node_rx_pdu *rx_pdu;
+#endif /* CONFIG_BT_CTLR_CONN_ISO */
 	struct node_rx_hdr *rx;
 	memq_link_t *link;
 

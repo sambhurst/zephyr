@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_l2_openthread, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 
-#include <net/net_core.h>
-#include <net/net_pkt.h>
-#include <net/net_mgmt.h>
-#include <net/openthread.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/net_pkt.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/openthread.h>
 
 #include <net_private.h>
 
-#include <init.h>
-#include <sys/util.h>
-#include <sys/__assert.h>
+#include <zephyr/init.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/__assert.h>
 #include <version.h>
 
 #include <openthread/cli.h>
@@ -122,10 +122,14 @@ static void ipv6_addr_event_handler(struct net_mgmt_event_callback *cb,
 		return;
 	}
 
+	if (cb->info == NULL || cb->info_length != sizeof(struct in6_addr)) {
+		return;
+	}
+
 	if (mgmt_event == NET_EVENT_IPV6_ADDR_ADD) {
-		add_ipv6_addr_to_ot(ot_context);
+		add_ipv6_addr_to_ot(ot_context, (const struct in6_addr *)cb->info);
 	} else if (mgmt_event == NET_EVENT_IPV6_MADDR_ADD) {
-		add_ipv6_maddr_to_ot(ot_context);
+		add_ipv6_maddr_to_ot(ot_context, (const struct in6_addr *)cb->info);
 	}
 }
 #endif
@@ -531,7 +535,7 @@ void ieee802154_init(struct net_if *iface)
 
 static enum net_l2_flags openthread_flags(struct net_if *iface)
 {
-	return NET_L2_MULTICAST;
+	return NET_L2_MULTICAST | NET_L2_MULTICAST_SKIP_JOIN_SOLICIT_NODE;
 }
 
 static int openthread_enable(struct net_if *iface, bool state)

@@ -306,9 +306,9 @@ struct bt_audio_base {
 };
 
 /** @brief Audio Capability type */
-enum bt_audio_pac_type {
-	BT_AUDIO_SINK = 0x01,
-	BT_AUDIO_SOURCE = 0x02,
+enum bt_audio_dir {
+	BT_AUDIO_DIR_SINK = 0x01,
+	BT_AUDIO_DIR_SOURCE = 0x02,
 };
 
 /** @def BT_CODEC_QOS
@@ -921,7 +921,7 @@ struct bt_audio_unicast_server_cb {
 	 *
 	 *  @param[in]  conn    Connection object.
 	 *  @param[in]  ep      Local Audio Endpoint being configured.
-	 *  @param[in]  type    Type of the endpoint.
+	 *  @param[in]  dir     Direction of the endpoint.
 	 *  @param[in]  codec   Codec configuration.
 	 *  @param[out] stream  Pointer to stream that will be configured for
 	 *                      the endpoint.
@@ -933,7 +933,7 @@ struct bt_audio_unicast_server_cb {
 	 */
 	int (*config)(struct bt_conn *conn,
 		      const struct bt_audio_ep *ep,
-		      enum bt_audio_pac_type type,
+		      enum bt_audio_dir dir,
 		      const struct bt_codec *codec,
 		      struct bt_audio_stream **stream,
 		      struct bt_codec_qos_pref *const pref);
@@ -944,7 +944,7 @@ struct bt_audio_unicast_server_cb {
 	 *  reconfigured with different codec configuration.
 	 *
 	 *  @param[in]  stream  Stream object being reconfigured.
-	 *  @param[in]  type    Type of the endpoint.
+	 *  @param[in]  dir     Direction of the endpoint.
 	 *  @param[in]  codec   Codec configuration.
 	 *  @param[out] pref    Pointer to a QoS preference object that shall
 	 *                      be populated with values. Invalid values will
@@ -953,7 +953,7 @@ struct bt_audio_unicast_server_cb {
 	 *  @return 0 in case of success or negative value in case of error.
 	 */
 	int (*reconfig)(struct bt_audio_stream *stream,
-			uint8_t type,
+			enum bt_audio_dir dir,
 			const struct bt_codec *codec,
 			struct bt_codec_qos_pref *const pref);
 
@@ -1082,13 +1082,13 @@ struct bt_audio_unicast_server_cb {
 	 *                        for sending a notification, as a result of
 	 *                        calling
 	 *                        bt_audio_unicast_server_location_changed().
-	 *  @param[in]  type      Type of the endpoint.
+	 *  @param[in]  dir       Direction of the endpoint.
 	 *  @param[out] location  Pointer to the location that needs to be set.
 	 *
 	 *  @return 0 in case of success or negative value in case of error.
 	 */
 	int (*publish_location)(struct bt_conn *conn,
-				enum bt_audio_pac_type type,
+				enum bt_audio_dir dir,
 				enum bt_audio_location *location);
 
 #if defined(CONFIG_BT_PAC_SNK_LOC_WRITEABLE) || defined(CONFIG_BT_PAC_SRC_LOC_WRITEABLE)
@@ -1098,12 +1098,12 @@ struct bt_audio_unicast_server_cb {
 	 *  requests to write the Published Audio Capabilities (PAC) location.
 	 *
 	 *  @param conn      The connection that requests the write.
-	 *  @param type      Type of the endpoint.
+	 *  @param dir       Direction of the endpoint.
 	 *  @param location  The location being written.
 	 *
 	 *  @return 0 in case of success or negative value in case of error.
 	 */
-	int (*write_location)(struct bt_conn *conn, enum bt_audio_pac_type type,
+	int (*write_location)(struct bt_conn *conn, enum bt_audio_dir dir,
 			      enum bt_audio_location location);
 #endif /* CONFIG_BT_PAC_SNK_LOC_WRITEABLE || CONFIG_BT_PAC_SRC_LOC_WRITEABLE */
 #endif /* CONFIG_BT_PAC_SNK_LOC || CONFIG_BT_PAC_SRC_LOC */
@@ -1279,9 +1279,15 @@ struct bt_audio_stream_ops {
 	 *  This callback is only used if the ISO data path is HCI.
 	 *
 	 *  @param stream Stream object.
-	 *  @param buf  Buffer containing incoming audio data.
+	 *  @param info   Pointer to the metadata for the buffer. The lifetime
+	 *                of the pointer is linked to the lifetime of the
+	 *                net_buf. Metadata such as sequence number and
+	 *                timestamp can be provided by the bluetooth controller.
+	 *  @param buf    Buffer containing incoming audio data.
 	 */
-	void (*recv)(struct bt_audio_stream *stream, struct net_buf *buf);
+	void (*recv)(struct bt_audio_stream *stream,
+		     const struct bt_iso_recv_info *info,
+		     struct net_buf *buf);
 #endif /* CONFIG_BT_AUDIO_UNICAST || CONFIG_BT_AUDIO_BROADCAST_SINK */
 
 #if defined(CONFIG_BT_AUDIO_UNICAST) || defined(CONFIG_BT_AUDIO_BROADCAST_SOURCE)
@@ -1340,9 +1346,11 @@ int bt_audio_unicast_server_unregister_cb(const struct bt_audio_unicast_server_c
  *
  * Notify connected clients that the location has changed
  *
+ * @param dir       Direction of the endpoint.
+ *
  * @return 0 in case of success or negative value in case of error.
  */
-int bt_audio_unicast_server_location_changed(enum bt_audio_pac_type type);
+int bt_audio_unicast_server_location_changed(enum bt_audio_dir dir);
 
 /** @} */ /* End of group bt_audio_server */
 
@@ -1366,7 +1374,7 @@ typedef void (*bt_audio_discover_func_t)(struct bt_conn *conn,
 
 struct bt_audio_discover_params {
 	/** Capabilities type */
-	uint8_t  type;
+	enum bt_audio_dir dir;
 	/** Callback function */
 	bt_audio_discover_func_t func;
 	/** Number of capabilities found */
@@ -1551,14 +1559,14 @@ int bt_audio_stream_send(struct bt_audio_stream *stream, struct net_buf *buf);
  *  unicast client. Streams in a unicast group shall share the same interval,
  *  framing and latency (see @ref bt_codec_qos).
  *
- *  @param[in]  streams        Array of stream objects being used for the
- *                             group.
+ *  @param[in]  streams        Array of stream object pointers being used for
+ *                             the group.
  *  @param[in]  num_stream     Number of streams in @p streams.
  *  @param[out] unicast_group  Pointer to the unicast group created
  *
  *  @return Zero on success or (negative) error code otherwise.
  */
-int bt_audio_unicast_group_create(struct bt_audio_stream *streams,
+int bt_audio_unicast_group_create(struct bt_audio_stream *streams[],
 				  size_t num_stream,
 				  struct bt_audio_unicast_group **unicast_group);
 
@@ -1573,13 +1581,14 @@ int bt_audio_unicast_group_create(struct bt_audio_stream *streams,
  *  (see bt_audio_stream_ops.stopped()).
  *
  *  @param unicast_group  Pointer to the unicast group
- *  @param streams        Array of stream objects being added to the group.
+ *  @param streams        Array of stream object pointers being added to the
+ *                        group.
  *  @param num_stream     Number of streams in @p streams.
  *
  *  @return 0 in case of success or negative value in case of error.
  */
 int bt_audio_unicast_group_add_streams(struct bt_audio_unicast_group *unicast_group,
-				       struct bt_audio_stream *streams,
+				       struct bt_audio_stream *streams[],
 				       size_t num_stream);
 
 /** @brief Remove streams from a unicast group as a unicast client
@@ -1592,13 +1601,14 @@ int bt_audio_unicast_group_add_streams(struct bt_audio_unicast_group *unicast_gr
  *  (see bt_audio_stream_ops.stopped()).
  *
  *  @param unicast_group  Pointer to the unicast group
- *  @param streams        Array of stream objects removed from the group.
+ *  @param streams        Array of stream object pointers removed from the
+ *                        group.
  *  @param num_stream     Number of streams in @p streams.
  *
  *  @return 0 in case of success or negative value in case of error.
  */
 int bt_audio_unicast_group_remove_streams(struct bt_audio_unicast_group *unicast_group,
-					  struct bt_audio_stream *streams,
+					  struct bt_audio_stream *streams[],
 					  size_t num_stream);
 
 /** @brief Delete audio unicast group.
@@ -1632,7 +1642,7 @@ int bt_audio_unicast_group_delete(struct bt_audio_unicast_group *unicast_group);
  *  called and no audio information (BIGInfo) will be visible to scanners
  *  (see bt_le_per_adv_sync_cb).
  *
- *  @param[in]  streams     Array of stream objects being used for the
+ *  @param[in]  streams     Array of stream object pointers being used for the
  *                          broadcaster. This array shall remain valid for the
  *                          duration of the broadcast source.
  *  @param[in]  num_stream  Number of streams in @p streams.
@@ -1642,7 +1652,7 @@ int bt_audio_unicast_group_delete(struct bt_audio_unicast_group *unicast_group);
  *
  *  @return Zero on success or (negative) error code otherwise.
  */
-int bt_audio_broadcast_source_create(struct bt_audio_stream *streams,
+int bt_audio_broadcast_source_create(struct bt_audio_stream *streams[],
 				     size_t num_stream,
 				     struct bt_codec *codec,
 				     struct bt_codec_qos *qos,
@@ -1735,9 +1745,9 @@ int bt_audio_broadcast_sink_scan_stop(void);
  *  @param indexes_bitfield   Bitfield of the BIS index to sync to. To sync to
  *                            e.g. BIS index 1 and 2, this should have the value
  *                            of BIT(1) | BIT(2).
- *  @param streams            Stream objects to be used for the receiver. If
- *                            multiple BIS indexes shall be synchronized,
- *                            multiple streams shall be provided.
+ *  @param streams            Stream object pointerss to be used for the
+ *                            receiver. If multiple BIS indexes shall be
+ *                            synchronized, multiple streams shall be provided.
  *  @param codec              Codec configuration.
  *  @param broadcast_code     The 16-octet broadcast code. Shall be supplied if
  *                            the broadcast is encrypted (see the syncable
@@ -1747,7 +1757,7 @@ int bt_audio_broadcast_sink_scan_stop(void);
  */
 int bt_audio_broadcast_sink_sync(struct bt_audio_broadcast_sink *sink,
 				 uint32_t indexes_bitfield,
-				 struct bt_audio_stream *streams,
+				 struct bt_audio_stream *streams[],
 				 struct bt_codec *codec,
 				 const uint8_t broadcast_code[16]);
 

@@ -10,10 +10,10 @@
  * Linker script for the esp32s2 platform.
  */
 
-#include <devicetree.h>
-#include <linker/sections.h>
-#include <linker/linker-defs.h>
-#include <linker/linker-tool.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/linker/sections.h>
+#include <zephyr/linker/linker-defs.h>
+#include <zephyr/linker/linker-tool.h>
 
 #define RAM_IRAM_START    0x40020000
 #define RAM_DRAM_START    0x3ffb0000
@@ -79,6 +79,8 @@ ENTRY(CONFIG_KERNEL_ENTRY)
 
 _rom_store_table = 0;
 
+_heap_sentry = 0x3fffe710;
+
 SECTIONS
 {
   /* Reserve space for MCUboot header in the binary */
@@ -116,7 +118,7 @@ SECTIONS
     LONG(LOADADDR(.dummy.dram.data) + SIZEOF(.dummy.dram.data) - LOADADDR(.dram0.data))
   } > metadata
 
-#include <linker/rel-sections.ld>
+#include <zephyr/linker/rel-sections.ld>
   _image_drom_start = LOADADDR(_RODATA_SECTION_NAME);
   _image_drom_size = LOADADDR(_RODATA_SECTION_NAME) + SIZEOF(_RODATA_SECTION_NAME) - _image_drom_start;
   _image_drom_vaddr = ADDR(_RODATA_SECTION_NAME);
@@ -130,9 +132,6 @@ SECTIONS
   SECTION_PROLOGUE(_RODATA_SECTION_NAME,,)
   {
     _rodata_start = ABSOLUTE(.);
-
-    *(.rodata_desc .rodata_desc.*)
-    *(.rodata_custom_desc .rodata_custom_desc.*)
 
     . = ALIGN(4);
     #include <snippets-rodata.ld>
@@ -154,14 +153,7 @@ SECTIONS
     __eh_frame = ABSOLUTE(.);
     KEEP(*(.eh_frame))
     . = (. + 7) & ~ 3;
-    /* C++ constructor and destructor tables */
-    __init_array_start = ABSOLUTE(.);
-    KEEP (*(EXCLUDE_FILE (*crtend.* *crtbegin.*) .ctors SORT(.ctors.*)))
-    __init_array_end = ABSOLUTE(.);
-    KEEP (*crtbegin.*(.dtors))
-    KEEP (*(EXCLUDE_FILE (*crtend.*) .dtors))
-    KEEP (*(SORT(.dtors.*)))
-    KEEP (*(.dtors))
+
     /*  C++ exception handlers table:  */
     __XT_EXCEPTION_DESCS_ = ABSOLUTE(.);
     *(.xt_except_desc)
@@ -193,12 +185,12 @@ SECTIONS
   #pragma push_macro("GROUP_ROM_LINK_IN")
   #undef GROUP_ROM_LINK_IN
   #define GROUP_ROM_LINK_IN(vregion, lregion) > RODATA_REGION AT > lregion
-  #include "linker/common-rom/common-rom-kernel-devices.ld"
-  #include "linker/common-rom/common-rom-cpp.ld"
-  #include "linker/common-rom/common-rom-net.ld"
-  #include "linker/common-rom/common-rom-bt.ld"
-  #include "linker/common-rom/common-rom-debug.ld"
-  #include "linker/common-rom/common-rom-misc.ld"
+  #include <zephyr/linker/common-rom/common-rom-cpp.ld>
+  #include <zephyr/linker/common-rom/common-rom-kernel-devices.ld>
+  #include <zephyr/linker/common-rom/common-rom-net.ld>
+  #include <zephyr/linker/common-rom/common-rom-bt.ld>
+  #include <zephyr/linker/common-rom/common-rom-debug.ld>
+  #include <zephyr/linker/common-rom/common-rom-misc.ld>
   #pragma pop_macro("GROUP_ROM_LINK_IN")
 
   /* Send .iram0 code to iram */
@@ -274,6 +266,7 @@ SECTIONS
     *libzephyr.a:log_backend_uart.*(.literal .text .literal.* .text.*)
     *libzephyr.a:loader.*(.literal .text .literal.* .text.*)
     *liblib__libc__minimal.a:string.*(.literal .text .literal.* .text.*)
+    *liblib__libc__newlib.a:string.*(.literal .text .literal.* .text.*)
     *libphy.a:( .phyiram .phyiram.*)
     *libgcov.a:(.literal .text .literal.* .text.*)
 
@@ -367,15 +360,17 @@ SECTIONS
     . = ALIGN(4);
   } GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
+  #include <zephyr/linker/cplusplus-rom.ld>
   #include <snippets-data-sections.ld>
-  #include <linker/common-ram.ld>
+  #include <zephyr/linker/common-ram.ld>
   #include <snippets-ram-sections.ld>
+  #include <zephyr/linker/cplusplus-ram.ld>
 
   /* logging sections should be placed in RAM area to avoid flash cache disabled issues */
   #pragma push_macro("GROUP_ROM_LINK_IN")
   #undef GROUP_ROM_LINK_IN
   #define GROUP_ROM_LINK_IN GROUP_DATA_LINK_IN
-  #include "linker/common-rom/common-rom-logging.ld"
+  #include <zephyr/linker/common-rom/common-rom-logging.ld>
   #pragma pop_macro("GROUP_ROM_LINK_IN")
 
   .dummy.dram.data :
@@ -383,6 +378,7 @@ SECTIONS
     . = ALIGN(4);
     #include <snippets-rwdata.ld>
     . = ALIGN(4);
+    _end = ABSOLUTE(.);
     _data_end = ABSOLUTE(.);
   } GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
@@ -470,14 +466,43 @@ SECTIONS
 #endif
 
 #ifdef CONFIG_GEN_ISR_TABLES
-#include <linker/intlist.ld>
+#include <zephyr/linker/intlist.ld>
 #endif
 
-#include <linker/debug-sections.ld>
+#include <zephyr/linker/debug-sections.ld>
 
-  SECTION_PROLOGUE(.xtensa.info, 0,)
+  .xtensa.info  0 :  { *(.xtensa.info) }
+  .xt.insn 0 :
   {
-    *(.xtensa.info)
+    KEEP (*(.xt.insn))
+    KEEP (*(.gnu.linkonce.x.*))
+  }
+  .xt.prop 0 :
+  {
+    KEEP (*(.xt.prop))
+    KEEP (*(.xt.prop.*))
+    KEEP (*(.gnu.linkonce.prop.*))
+  }
+  .xt.lit 0 :
+  {
+    KEEP (*(.xt.lit))
+    KEEP (*(.xt.lit.*))
+    KEEP (*(.gnu.linkonce.p.*))
+  }
+  .xt.profile_range 0 :
+  {
+    KEEP (*(.xt.profile_range))
+    KEEP (*(.gnu.linkonce.profile_range.*))
+  }
+  .xt.profile_ranges 0 :
+  {
+    KEEP (*(.xt.profile_ranges))
+    KEEP (*(.gnu.linkonce.xt.profile_ranges.*))
+  }
+  .xt.profile_files 0 :
+  {
+    KEEP (*(.xt.profile_files))
+    KEEP (*(.gnu.linkonce.xt.profile_files.*))
   }
 }
 

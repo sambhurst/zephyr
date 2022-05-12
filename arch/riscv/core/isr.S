@@ -6,15 +6,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <toolchain.h>
-#include <linker/sections.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/linker/sections.h>
 #include <offsets_short.h>
-#include <arch/cpu.h>
-#include <sys/util.h>
-#include <kernel.h>
-#include <syscall.h>
-#include <arch/riscv/csr.h>
-#include <arch/riscv/syscall.h>
+#include <zephyr/arch/cpu.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/kernel.h>
+#include <zephyr/syscall.h>
+#include <zephyr/arch/riscv/csr.h>
+#include <zephyr/arch/riscv/syscall.h>
 #include "asm_macros.inc"
 
 /* Convenience macros for loading/storing register states. */
@@ -91,6 +91,7 @@ GTEXT(z_riscv_thread_start)
 
 #ifdef CONFIG_TRACING
 GTEXT(sys_trace_isr_enter)
+GTEXT(sys_trace_isr_exit)
 #endif
 
 #ifdef CONFIG_USERSPACE
@@ -491,6 +492,10 @@ on_irq_stack:
 
 	/* Call ISR function */
 	jalr ra, t1, 0
+
+#ifdef CONFIG_TRACING_ISR
+    call sys_trace_isr_exit
+#endif
 
 irq_done:
 	/* Decrement _current_cpu->nested */

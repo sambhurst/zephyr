@@ -4,18 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(mcumgr_img_mgmt, CONFIG_MCUMGR_IMG_MGMT_LOG_LEVEL);
 
 #include <assert.h>
-#include <drivers/flash.h>
-#include <storage/flash_map.h>
-#include <zephyr.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/zephyr.h>
 #include <soc.h>
-#include <init.h>
-#include <dfu/mcuboot.h>
-#include <dfu/flash_img.h>
-#include <mgmt/mcumgr/buf.h>
+#include <zephyr/init.h>
+#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/dfu/flash_img.h>
+#include <zephyr/mgmt/mcumgr/buf.h>
 #include <mgmt/mgmt.h>
 #include <img_mgmt/img_mgmt_impl.h>
 #include <img_mgmt/img_mgmt.h>
@@ -225,17 +225,7 @@ img_mgmt_get_unused_slot_area_id(int image)
 #error "Unsupported number of images"
 #endif
 
-/**
- * Compares two image version numbers in a semver-compatible way.
- *
- * @param a	The first version to compare.
- * @param b	The second version to compare.
- *
- * @return	-1 if a < b
- * @return	0 if a = b
- * @return	1 if a > b
- */
-static int
+int
 img_mgmt_vercmp(const struct image_version *a, const struct image_version *b)
 {
 	if (a->iv_major < b->iv_major) {

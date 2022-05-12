@@ -62,6 +62,13 @@
 			status = "disabled";
 		};
 
+		clk_msik: clk-msik {
+			#clock-cells = <0>;
+			compatible = "st,stm32u5-msi-clock";
+			msi-range = <4>; /* 4MHz (reset value) */
+			status = "disabled";
+		};
+
 		clk_lse: clk-lse {
 			#clock-cells = <0>;
 			compatible = "st,stm32-lse-clock";
@@ -392,7 +399,7 @@
 		};
 
 		can {
-			compatible = "bosch,m-can-base";
+			compatible = "bosch,m_can-base";
 			#address-cells = <1>;
 			#size-cells = <1>;
 			std-filter-elements = <28>;
