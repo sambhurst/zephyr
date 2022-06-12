@@ -830,7 +830,7 @@ attaching:
 #endif
 	}
 
-	LOG_DBG("modem RSSI: %d, %s", *gsm->context.data_rssi, "enable PPP");
+	LOG_DBG("modem RSSI: %d, %s", gsm->minfo.mdm_rssi, "enable PPP");
 
 	ret = modem_cmd_handler_setup_cmds_nolock(&gsm->context.iface,
 						  &gsm->context.cmd_handler,
@@ -1154,11 +1154,11 @@ void gsm_ppp_stop(const struct device *dev)
 
 	gsm_ppp_lock(gsm);
 
-	net_if_l2(iface)->enable(iface, false);
-
 	/* wait for the interface to be properly down */
-	(void)k_sem_take(&gsm->sem_if_down, K_FOREVER);
-
+	if (net_if_is_up(iface)) {
+		net_if_l2(iface)->enable(iface, false);
+		(void)k_sem_take(&gsm->sem_if_down, K_FOREVER);
+	}
 	if (IS_ENABLED(CONFIG_GSM_MUX)) {
 
 		if (gsm->ppp_dev) {

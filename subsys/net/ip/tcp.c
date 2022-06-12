@@ -692,6 +692,29 @@ end:
 	return result;
 }
 
+/**
+ * @brief Update TCP receive window
+ *
+ * @param conn TCP network connection
+ * @param delta Receive window delta
+ *
+ * @return 0 on success, -EINVAL
+ *         if the receive window delta is out of bounds
+ */
+static int tcp_update_recv_wnd(struct tcp *conn, int32_t delta)
+{
+	int32_t new_win;
+
+	new_win = conn->recv_win + delta;
+	if (new_win < 0 || new_win > UINT16_MAX) {
+		return -EINVAL;
+	}
+
+	conn->recv_win = new_win;
+
+	return 0;
+}
+
 static size_t tcp_check_pending_data(struct tcp *conn, struct net_pkt *pkt,
 				     size_t len)
 {
@@ -747,7 +770,7 @@ static int tcp_data_get(struct tcp *conn, struct net_pkt *pkt, size_t *len)
 
 		net_pkt_skip(up, net_pkt_get_len(up) - *len);
 
-		net_context_update_recv_wnd(conn->context, -*len);
+		tcp_update_recv_wnd(conn, -*len);
 
 		/* Do not pass data to application with TCP conn
 		 * locked as there could be an issue when the app tries
@@ -825,6 +848,37 @@ static int ip_header_add(struct tcp *conn, struct net_pkt *pkt)
 	return -EINVAL;
 }
 
+static int set_tcp_nodelay(struct tcp *conn, const void *value, size_t len)
+{
+	int no_delay_int;
+
+	if (len != sizeof(int)) {
+		return -EINVAL;
+	}
+
+	no_delay_int = *(int *)value;
+
+	if ((no_delay_int < 0) || (no_delay_int > 1)) {
+		return -EINVAL;
+	}
+
+	conn->tcp_nodelay = (bool)no_delay_int;
+
+	return 0;
+}
+
+static int get_tcp_nodelay(struct tcp *conn, void *value, size_t *len)
+{
+	int no_delay_int = (int)conn->tcp_nodelay;
+
+	*((int *)value) = no_delay_int;
+
+	if (len) {
+		*len = sizeof(int);
+	}
+	return 0;
+}
+
 static int net_tcp_set_mss_opt(struct tcp *conn, struct net_pkt *pkt)
 {
 	NET_PKT_DATA_ACCESS_DEFINE(mss_opt_access, struct tcp_mss_option);
@@ -836,7 +890,7 @@ static int net_tcp_set_mss_opt(struct tcp *conn, struct net_pkt *pkt)
 		return -ENOBUFS;
 	}
 
-	recv_mss = net_tcp_get_recv_mss(conn);
+	recv_mss = net_tcp_get_supported_mss(conn);
 	recv_mss |= (NET_TCP_MSS_OPT << 24) | (NET_TCP_MSS_SIZE << 16);
 
 	UNALIGNED_PUT(htonl(recv_mss), (uint32_t *)mss);
@@ -997,6 +1051,11 @@ static int tcp_unsent_len(struct tcp *conn)
 	}
 
 	unsent_len = conn->send_data_total - conn->unacked_len;
+	if (conn->unacked_len >= conn->send_win) {
+		unsent_len = 0;
+	} else {
+		unsent_len = MIN(unsent_len, conn->send_win - conn->unacked_len);
+	}
  out:
 	NET_DBG("unsent_len=%d", unsent_len);
 
@@ -1069,9 +1128,17 @@ static int tcp_send_queued_data(struct tcp *conn)
 	}
 
 	while (tcp_unsent_len(conn) > 0) {
-		if (tcp_window_full(conn)) {
-			subscribe = true;
-			break;
+		/* Implement Nagle's algorithm */
+		if ((conn->tcp_nodelay == false) && (conn->unacked_len > 0)) {
+			/* If there is already pending data */
+			if (tcp_unsent_len(conn) < conn_mss(conn)) {
+				/* The number of bytes to be transmitted is less than an MSS,
+				 * skip transmission for now.
+				 * Wait for more data to be transmitted or all pending data
+				 * being acknowledged.
+				 */
+				break;
+			}
 		}
 
 		ret = tcp_send_data(conn);
@@ -1080,24 +1147,12 @@ static int tcp_send_queued_data(struct tcp *conn)
 		}
 	}
 
-	if (tcp_window_full(conn)) {
-		(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
-	}
-
-	if (conn->unacked_len) {
+	if (conn->send_data_total) {
 		subscribe = true;
 	}
 
 	if (k_work_delayable_remaining_get(&conn->send_data_timer)) {
 		subscribe = false;
-	}
-
-	/* If we have out-of-bufs case, then do not start retransmit timer
-	 * yet. The socket layer will catch this and resend data if needed.
-	 */
-	if (ret == -ENOBUFS) {
-		NET_DBG("No bufs, cancelling retransmit timer");
-		k_work_cancel_delayable(&conn->send_data_timer);
 	}
 
 	if (subscribe) {
@@ -1177,6 +1232,8 @@ static void tcp_resend_data(struct k_work *work)
 		}
 
 		goto out;
+	} else if (ret == -ENOBUFS) {
+		NET_ERR("TCP failed to allocate buffer in retransmission");
 	}
 
 	k_work_reschedule_for_queue(&tcp_work_q, &conn->send_data_timer,
@@ -1288,6 +1345,7 @@ static struct tcp *tcp_conn_alloc(struct net_context *context)
 	conn->in_connect = false;
 	conn->state = TCP_LISTEN;
 	conn->recv_win = tcp_window;
+	conn->tcp_nodelay = false;
 
 	/* Set the recv_win with the rcvbuf configured for the socket. */
 	if (IS_ENABLED(CONFIG_NET_CONTEXT_RCVBUF) &&
@@ -2053,6 +2111,10 @@ next_state:
 				close_status = ret;
 				break;
 			}
+
+			if (tcp_window_full(conn)) {
+				(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
+			}
 		}
 
 		if (th) {
@@ -2250,21 +2312,12 @@ int net_tcp_listen(struct net_context *context)
 
 int net_tcp_update_recv_wnd(struct net_context *context, int32_t delta)
 {
-	int32_t new_win;
-
 	if (!context->tcp) {
 		NET_ERR("context->tcp == NULL");
 		return -EPROTOTYPE;
 	}
 
-	new_win = ((struct tcp *)context->tcp)->recv_win + delta;
-	if (new_win < 0 || new_win > UINT16_MAX) {
-		return -EINVAL;
-	}
-
-	((struct tcp *)context->tcp)->recv_win = new_win;
-
-	return 0;
+	return tcp_update_recv_wnd((struct tcp *)context->tcp, delta);
 }
 
 /* net_context queues the outgoing data for the TCP connection */
@@ -2343,6 +2396,19 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 		goto out;
 	}
 
+	if ((ret == -ENOBUFS) &&
+		(conn->send_data_total < (conn->unacked_len + len))) {
+		/* Some of the data has been sent, we cannot remove the
+		 * whole chunk, the remainder portion is already
+		 * in the send_data and will be transmitted upon a
+		 * received ack or the next send call
+		 *
+		 * Set the return code back to 0 to pretend we just
+		 * transmitted the chunk
+		 */
+		ret = 0;
+	}
+
 	if (ret == -ENOBUFS) {
 		/* Restore the original data so that we do not resend the pkt
 		 * data multiple times.
@@ -2356,7 +2422,23 @@ int net_tcp_queue_data(struct net_context *context, struct net_pkt *pkt)
 			pkt->buffer = conn->send_data->buffer;
 			conn->send_data->buffer = NULL;
 		}
+
+		/* If we have out-of-bufs case, and the send_data buffer has
+		 * become empty, till the retransmit timer, as there is no
+		 * data to retransmit.
+		 * The socket layer will catch this and resend data if needed.
+		 * Only perform this when it is just the newly added packet,
+		 * otherwise it can disrupt any pending transmission
+		 */
+		if (conn->send_data_total == 0) {
+			NET_DBG("No bufs, cancelling retransmit timer");
+			k_work_cancel_delayable(&conn->send_data_timer);
+		}
 	} else {
+		if (tcp_window_full(conn)) {
+			(void)k_sem_take(&conn->tx_sem, K_NO_WAIT);
+		}
+
 		/* We should not free the pkt if there was an error. It will be
 		 * freed in net_context.c:context_sendto()
 		 */
@@ -2916,7 +2998,7 @@ void net_tcp_foreach(net_tcp_cb_t cb, void *user_data)
 	k_mutex_unlock(&tcp_lock);
 }
 
-uint16_t net_tcp_get_recv_mss(const struct tcp *conn)
+uint16_t net_tcp_get_supported_mss(const struct tcp *conn)
 {
 	sa_family_t family = net_context_get_family(conn->context);
 
@@ -2955,6 +3037,56 @@ uint16_t net_tcp_get_recv_mss(const struct tcp *conn)
 #endif /* CONFIG_NET_IPV6 */
 
 	return 0;
+}
+
+int net_tcp_set_option(struct net_context *context,
+		       enum tcp_conn_option option,
+		       const void *value, size_t len)
+{
+	int ret = 0;
+
+	NET_ASSERT(context);
+
+	struct tcp *conn = context->tcp;
+
+	NET_ASSERT(conn);
+
+	k_mutex_lock(&conn->lock, K_FOREVER);
+
+	switch (option) {
+	case TCP_OPT_NODELAY:
+		ret = set_tcp_nodelay(conn, value, len);
+		break;
+	}
+
+	k_mutex_unlock(&conn->lock);
+
+	return ret;
+}
+
+int net_tcp_get_option(struct net_context *context,
+		       enum tcp_conn_option option,
+		       void *value, size_t *len)
+{
+	int ret = 0;
+
+	NET_ASSERT(context);
+
+	struct tcp *conn = context->tcp;
+
+	NET_ASSERT(conn);
+
+	k_mutex_lock(&conn->lock, K_FOREVER);
+
+	switch (option) {
+	case TCP_OPT_NODELAY:
+		ret = get_tcp_nodelay(conn, value, len);
+		break;
+	}
+
+	k_mutex_unlock(&conn->lock);
+
+	return ret;
 }
 
 const char *net_tcp_state_str(enum tcp_state state)
