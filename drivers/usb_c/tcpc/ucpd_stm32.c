@@ -49,7 +49,7 @@ static int ucpd_txorderset[] = {
 /**
  * @brief Test for a goodCRC message
  *
- * @returns true if message is goodCRC, else false
+ * @retval true if message is goodCRC, else false
  */
 static bool ucpd_msg_is_good_crc(union pd_header header)
 {
@@ -151,8 +151,8 @@ static void stm32_ucpd_state_init(const struct device *dev)
 /**
  * @brief Get the state of the CC1 and CC2 lines
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_get_cc(const struct device *dev,
 		       enum tc_cc_voltage_state *cc1,
@@ -220,7 +220,7 @@ static int ucpd_get_cc(const struct device *dev,
  * @brief Get the CC enable mask. The mask indicates which CC line
  *        is enabled.
  *
- * @return CC Enable mask (bit 0: CC1, bit 1: CC2)
+ * @retval CC Enable mask (bit 0: CC1, bit 1: CC2)
  */
 static uint32_t ucpd_get_cc_enable_mask(const struct device *dev)
 {
@@ -241,9 +241,9 @@ static uint32_t ucpd_get_cc_enable_mask(const struct device *dev)
 /**
  * @brief Enable or Disable VCONN
  *
- * @return 0 on success
- * @return -EIO on failure
- * @return -ENOTSUP if not supported
+ * @retval 0 on success
+ * @retval -EIO on failure
+ * @retval -ENOTSUP if not supported
  */
 static int ucpd_set_vconn(const struct device *dev, bool enable)
 {
@@ -279,7 +279,7 @@ static int ucpd_set_vconn(const struct device *dev, bool enable)
 /**
  * @brief Sets the value of the CC pull up resistor used when operating as a Source
  *
- * @return 0 on success
+ * @retval 0 on success
  */
 static int ucpd_select_rp_value(const struct device *dev, enum tc_rp_value rp)
 {
@@ -293,7 +293,7 @@ static int ucpd_select_rp_value(const struct device *dev, enum tc_rp_value rp)
 /**
  * @brief Gets the value of the CC pull up resistor used when operating as a Source
  *
- * @return 0 on success
+ * @retval 0 on success
  */
 static int ucpd_get_rp_value(const struct device *dev, enum tc_rp_value *rp)
 {
@@ -307,8 +307,8 @@ static int ucpd_get_rp_value(const struct device *dev, enum tc_rp_value *rp)
 /**
  * @brief Set the CC pull up or pull down resistors
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_set_cc(const struct device *dev,
 		       enum tc_cc_pull cc_pull)
@@ -352,9 +352,9 @@ static int ucpd_set_cc(const struct device *dev,
  * @brief Set the polarity of the CC line, which is the active CC line
  *        used for power delivery.
  *
- * @return 0 on success
- * @return -EIO on failure
- * @return -ENOTSUP if polarity is not supported
+ * @retval 0 on success
+ * @retval -EIO on failure
+ * @retval -ENOTSUP if polarity is not supported
  */
 static int ucpd_cc_set_polarity(const struct device *dev,
 				enum tc_cc_polarity polarity)
@@ -388,8 +388,8 @@ static int ucpd_cc_set_polarity(const struct device *dev,
 /**
  * @brief Enable or Disable Power Delivery
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_set_rx_enable(const struct device *dev, bool enable)
 {
@@ -424,8 +424,8 @@ static int ucpd_set_rx_enable(const struct device *dev, bool enable)
 /**
  * @brief Set the Power and Data role used when sending goodCRC messages
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_set_roles(const struct device *dev,
 			  enum tc_power_role power_role,
@@ -442,8 +442,8 @@ static int ucpd_set_roles(const struct device *dev,
 /**
  * @brief Enable the reception of SOP Prime messages
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_sop_prime_enable(const struct device *dev, bool enable)
 {
@@ -887,8 +887,8 @@ static void ucpd_send_good_crc(const struct device *dev,
 /**
  * @brief Transmit a power delivery message
  *
- * @return 0 on success
- * @return -EFAULT on failure
+ * @retval 0 on success
+ * @retval -EFAULT on failure
  */
 static int ucpd_transmit_data(const struct device *dev,
 			      struct pd_msg *msg)
@@ -931,7 +931,7 @@ static int ucpd_transmit_data(const struct device *dev,
 /**
  * @brief Tests if a received Power Delivery message is pending
  *
- * @return true if message is pending, else false
+ * @retval true if message is pending, else false
  */
 static bool ucpd_is_rx_pending_msg(const struct device *dev,
 				   enum pd_packet_type *type)
@@ -951,9 +951,9 @@ static bool ucpd_is_rx_pending_msg(const struct device *dev,
 /**
  * @brief Retrieves the Power Delivery message from the TCPC
  *
- * @return number of bytes received
- * @return -EIO on no message to retrieve
- * @return -EFAULT on buf being NULL
+ * @retval number of bytes received
+ * @retval -EIO on no message to retrieve
+ * @retval -EFAULT on buf being NULL
  */
 static int ucpd_receive_data(const struct device *dev, struct pd_msg *msg)
 {
@@ -1174,8 +1174,8 @@ static void ucpd_isr(const struct device *dev_inst[])
 /**
  * @brief Dump a set of TCPC registers
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_dump_std_reg(const struct device *dev)
 {
@@ -1195,8 +1195,8 @@ static int ucpd_dump_std_reg(const struct device *dev)
  * @brief Sets the alert function that's called when an interrupt is triggered
  *        due to a TCPC alert
  *
- * @return 0 on success
- * @return -EINVAL on failure
+ * @retval 0 on success
+ * @retval -EINVAL on failure
  */
 static int ucpd_set_alert_handler_cb(const struct device *dev,
 				     tcpc_alert_handler_cb_t handler, void *alert_data)
@@ -1372,8 +1372,8 @@ static void ucpd_isr_init(const struct device *dev)
 /**
  * @brief Initializes the TCPC
  *
- * @return 0 on success
- * @return -EIO on failure
+ * @retval 0 on success
+ * @retval -EIO on failure
  */
 static int ucpd_init(const struct device *dev)
 {
