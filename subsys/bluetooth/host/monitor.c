@@ -14,7 +14,7 @@
 #include <zephyr/zephyr.h>
 #include <zephyr/device.h>
 #include <zephyr/init.h>
-#include <zephyr/drivers/console/uart_pipe.h>
+#include <zephyr/drivers/uart_pipe.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/uart.h>
 
@@ -310,49 +310,8 @@ static inline uint8_t monitor_priority_get(uint8_t log_level)
 	return BT_LOG_DBG;
 }
 
-static void monitor_log_put(const struct log_backend *const backend,
-			    struct log_msg *msg)
-{
-	struct bt_monitor_user_logging log;
-	struct monitor_log_ctx ctx;
-	struct bt_monitor_hdr hdr;
-	const char id[] = "bt";
-
-	log_msg_get(msg);
-
-	log_output_ctx_set(&monitor_log_output, &ctx);
-
-	ctx.total_len = 0;
-	log_output_msg_process(&monitor_log_output, msg,
-			       LOG_OUTPUT_FLAG_CRLF_NONE);
-
-	if (atomic_test_and_set_bit(&flags, BT_LOG_BUSY)) {
-		drop_add(BT_MONITOR_USER_LOGGING);
-		log_msg_put(msg);
-		return;
-	}
-
-	encode_hdr(&hdr, msg->hdr.timestamp, BT_MONITOR_USER_LOGGING,
-		   sizeof(log) + sizeof(id) + ctx.total_len + 1);
-
-	log.priority = monitor_priority_get(msg->hdr.ids.level);
-	log.ident_len = sizeof(id);
-
-	log_msg_put(msg);
-
-	monitor_send(&hdr, BT_MONITOR_BASE_HDR_LEN + hdr.hdr_len);
-	monitor_send(&log, sizeof(log));
-	monitor_send(id, sizeof(id));
-	monitor_send(ctx.msg, ctx.total_len);
-
-	/* Terminate the string with null */
-	poll_out('\0');
-
-	atomic_clear_bit(&flags, BT_LOG_BUSY);
-}
-
 static void monitor_log_process(const struct log_backend *const backend,
-				union log_msg2_generic *msg)
+				union log_msg_generic *msg)
 {
 	struct bt_monitor_user_logging user_log;
 	struct monitor_log_ctx ctx;
@@ -362,7 +321,7 @@ static void monitor_log_process(const struct log_backend *const backend,
 	log_output_ctx_set(&monitor_log_output, &ctx);
 
 	ctx.total_len = 0;
-	log_output_msg2_process(&monitor_log_output, &msg->log,
+	log_output_msg_process(&monitor_log_output, &msg->log,
 			       LOG_OUTPUT_FLAG_CRLF_NONE);
 
 	if (atomic_test_and_set_bit(&flags, BT_LOG_BUSY)) {
@@ -370,11 +329,11 @@ static void monitor_log_process(const struct log_backend *const backend,
 		return;
 	}
 
-	encode_hdr(&hdr, (uint32_t)log_msg2_get_timestamp(&msg->log),
+	encode_hdr(&hdr, (uint32_t)log_msg_get_timestamp(&msg->log),
 		   BT_MONITOR_USER_LOGGING,
 		   sizeof(user_log) + sizeof(id) + ctx.total_len + 1);
 
-	user_log.priority = monitor_priority_get(log_msg2_get_level(&msg->log));
+	user_log.priority = monitor_priority_get(log_msg_get_level(&msg->log));
 	user_log.ident_len = sizeof(id);
 
 	monitor_send(&hdr, BT_MONITOR_BASE_HDR_LEN + hdr.hdr_len);
@@ -398,8 +357,7 @@ static void monitor_log_init(const struct log_backend *const backend)
 }
 
 static const struct log_backend_api monitor_log_api = {
-	.process = IS_ENABLED(CONFIG_LOG2_DEFERRED) ? monitor_log_process : NULL,
-	.put = IS_ENABLED(CONFIG_LOG1_DEFERRED) ? monitor_log_put : NULL,
+	.process = monitor_log_process,
 	.panic = monitor_log_panic,
 	.init = monitor_log_init,
 };

@@ -46,6 +46,7 @@
 #define LWM2M_OBJECT_CONNECTIVITY_STATISTICS_ID 7
 #define LWM2M_OBJECT_SOFTWARE_MANAGEMENT_ID     9
 #define LWM2M_OBJECT_PORTFOLIO_ID               16
+#define LWM2M_OBJECT_EVENT_LOG_ID               20
 #define LWM2M_OBJECT_GATEWAY_ID                 25
 /* clang-format on */
 
@@ -105,6 +106,19 @@ enum lwm2m_observe_event {
 typedef void (*lwm2m_observe_cb_t)(enum lwm2m_observe_event event, struct lwm2m_obj_path *path,
 				   void *user_data);
 
+
+struct lwm2m_ctx;
+enum lwm2m_rd_client_event;
+/**
+ * @brief Asynchronous RD client event callback
+ *
+ * @param[in] ctx LwM2M context generating the event
+ * @param[in] event LwM2M RD client event code
+ */
+typedef void (*lwm2m_ctx_event_cb_t)(struct lwm2m_ctx *ctx,
+				     enum lwm2m_rd_client_event event);
+
+
 /**
  * @brief LwM2M context structure to maintain information for a single
  * LwM2M connection.
@@ -113,9 +127,9 @@ struct lwm2m_ctx {
 	/** Destination address storage */
 	struct sockaddr remote_addr;
 
-	/** Private CoAP and networking structures */
-	struct coap_pending pendings[CONFIG_LWM2M_ENGINE_MAX_PENDING];
-	struct coap_reply replies[CONFIG_LWM2M_ENGINE_MAX_REPLIES];
+	/** Private CoAP and networking structures + 1 is for RD Client own message */
+	struct coap_pending pendings[CONFIG_LWM2M_ENGINE_MAX_PENDING + 1];
+	struct coap_reply replies[CONFIG_LWM2M_ENGINE_MAX_REPLIES + 1];
 	sys_slist_t pending_sends;
 #if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
 	sys_slist_t queued_messages;
@@ -191,6 +205,8 @@ struct lwm2m_ctx {
 	 *  out notifications.
 	 */
 	lwm2m_observe_cb_t observe_cb;
+
+	lwm2m_ctx_event_cb_t event_cb;
 
 	/** Validation buffer. Used as a temporary buffer to decode the resource
 	 *  value before validation. On successful validation, its content is
@@ -541,6 +557,20 @@ int lwm2m_swmgmt_set_write_package_cb(uint16_t obj_inst_id, lwm2m_engine_set_dat
  * return 0 on success, otherwise a negative integer.
  */
 int lwm2m_swmgmt_install_completed(uint16_t obj_inst_id, int error_code);
+
+#endif
+
+#if defined(CONFIG_LWM2M_EVENT_LOG_OBJ_SUPPORT)
+
+/**
+ * @brief Set callback to read log data
+ *
+ * The callback will be executed when the LWM2M read operation gets called
+ * on the corresponding object.
+ *
+ * @param[in] cb A callback function for handling the read event.
+ */
+void lwm2m_event_log_set_read_log_data_cb(lwm2m_engine_get_data_cb_t cb);
 
 #endif
 
@@ -1212,15 +1242,6 @@ enum lwm2m_rd_client_event {
 #define LWM2M_RD_CLIENT_FLAG_BOOTSTRAP BIT(0)
 
 /**
- * @brief Asynchronous RD client event callback
- *
- * @param[in] ctx LwM2M context generating the event
- * @param[in] event LwM2M RD client event code
- */
-typedef void (*lwm2m_ctx_event_cb_t)(struct lwm2m_ctx *ctx,
-				     enum lwm2m_rd_client_event event);
-
-/**
  * @brief Start the LwM2M RD (Registration / Discovery) Client
  *
  * The RD client sits just above the LwM2M engine and performs the necessary
@@ -1281,7 +1302,7 @@ void lwm2m_rd_client_update(void);
  *
  * @return Resulting formatted path string
  */
-char *lwm2m_path_log_strdup(char *buf, struct lwm2m_obj_path *path);
+char *lwm2m_path_log_buf(char *buf, struct lwm2m_obj_path *path);
 
 /** 
  * @brief LwM2M SEND operation to given path list

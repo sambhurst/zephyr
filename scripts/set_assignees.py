@@ -9,6 +9,7 @@ import os
 import time
 import datetime
 from github import Github, GithubException
+from github.GithubException import UnknownObjectException
 from collections import defaultdict
 
 TOP_DIR = os.path.join(os.path.dirname(__file__))
@@ -155,10 +156,13 @@ def process_pr(gh, maintainer_file, number):
             page += 1
 
         for c in collab:
-            u = gh.get_user(c)
-            if pr.user != u and gh_repo.has_in_collaborators(u):
-                if u not in existing_reviewers:
-                    reviewers.append(c)
+            try:
+                u = gh.get_user(c)
+                if pr.user != u and gh_repo.has_in_collaborators(u):
+                    if u not in existing_reviewers:
+                        reviewers.append(c)
+            except UnknownObjectException as e:
+                log(f"Can't get user '{c}', account does not exist anymore? ({e})")
 
         if reviewers:
             try:
@@ -170,7 +174,7 @@ def process_pr(gh, maintainer_file, number):
 
     ms = []
     # assignees
-    if maintainer != 'None':
+    if maintainer != 'None' and not pr.assignee:
         try:
             u = gh.get_user(maintainer)
             ms.append(u)
@@ -181,6 +185,8 @@ def process_pr(gh, maintainer_file, number):
             log(f"Adding assignee {mm}...")
             if not args.dry_run:
                 pr.add_to_assignees(mm)
+    else:
+        log("not setting assignee")
 
     time.sleep(1)
 
