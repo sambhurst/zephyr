@@ -1463,13 +1463,6 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 			data[*data_len].data_len = sizeof(discov_data);
 			data[*data_len].data = &discov_data;
 			(*data_len)++;
-		} else if (!strcmp(arg, "name")) {
-			const char *name = bt_get_name();
-
-			data[*data_len].type = BT_DATA_NAME_COMPLETE;
-			data[*data_len].data_len = strlen(name);
-			data[*data_len].data = name;
-			(*data_len)++;
 		} else if (!strcmp(arg, "scan-response")) {
 			if (data == sd) {
 				shell_print(sh, "Failed to set advertising data: "
@@ -2923,7 +2916,7 @@ enum bt_security_err pairing_accept(
 
 void bond_deleted(uint8_t id, const bt_addr_le_t *peer)
 {
-	char addr[BT_ADDR_STR_LEN];
+	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(peer, addr, sizeof(addr));
 	shell_print(ctx_shell, "Bond deleted for %s, id %u", addr, id);
@@ -3366,7 +3359,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD_ARG(adv-create, NULL, EXT_ADV_PARAM, cmd_adv_create, 2, 11),
 	SHELL_CMD_ARG(adv-param, NULL, EXT_ADV_PARAM, cmd_adv_param, 2, 11),
 	SHELL_CMD_ARG(adv-data, NULL, "<data> [scan-response <data>] "
-				      "<type: discov, name, hex>", cmd_adv_data,
+				      "<type: discov, hex>", cmd_adv_data,
 		      1, 16),
 	SHELL_CMD_ARG(adv-start, NULL,
 		"[timeout <timeout>] [num-events <num events>]",

@@ -367,9 +367,9 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
         help="Delete artifacts of passing tests.")
 
     test_xor_generator.add_argument(
-        "-N", "--ninja", action="store_true", default="--make" not in sys.argv,
-        help="Use the Ninja generator with CMake. (This is the default)",
-        required="--short-build-path" in sys.argv)
+        "-N", "--ninja", action="store_true",
+        default=not any(a in sys.argv for a in ("-k", "--make")),
+        help="Use the Ninja generator with CMake. (This is the default)")
 
     test_xor_generator.add_argument(
         "-k", "--make", action="store_true",
@@ -602,6 +602,10 @@ structure in the main Zephyr tree: boards/<arch>/<board_name>/""")
     options = parser.parse_args(args)
 
     # Very early error handling
+    if options.short_build_path and not options.ninja:
+        logger.error("--short-build-path requires Ninja to be enabled")
+        sys.exit(1)
+
     if options.device_serial_pty and os.name == "nt":  # OS is Windows
         logger.error("--device-serial-pty is not supported on Windows OS")
         sys.exit(1)

@@ -16,34 +16,8 @@ config DAC_MCUX_DAC
 	default y
 	depends on DAC
 
-if CLOCK_CONTROL
-
-config CLOCK_CONTROL_MCUX_MCG
-	default y
-
-config CLOCK_CONTROL_MCUX_SIM
-	default y
-
-endif # CLOCK_CONTROL
-
 config GPIO
 	default y
-
-config GPIO_MCUX
-	default y
-	depends on GPIO
-
-config I2C_MCUX
-	default y
-	depends on I2C
-
-config PWM_MCUX_FTM
-	default y
-	depends on PWM
-
-config SPI_MCUX_DSPI
-	default y
-	depends on SPI
 
 config ENTROPY_MCUX_RNGA
 	default y
@@ -52,10 +26,6 @@ config ENTROPY_MCUX_RNGA
 config SOC_FLASH_MCUX
 	default y
 	depends on FLASH
-
-config UART_MCUX
-	default y
-	depends on SERIAL
 
 config USB_KINETIS
 	default y

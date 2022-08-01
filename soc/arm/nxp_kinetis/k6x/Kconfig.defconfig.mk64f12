@@ -24,37 +24,11 @@ config CAN_MCUX_FLEXCAN
 	default y
 	depends on CAN
 
-if CLOCK_CONTROL
-
-config CLOCK_CONTROL_MCUX_SIM
-	default y
-
-config CLOCK_CONTROL_MCUX_MCG
-	default y
-
-endif # CLOCK_CONTROL
-
 config GPIO
 	default y
 
-config GPIO_MCUX
-	default y
-	depends on GPIO
-
-config I2C_MCUX
-	default y
-	depends on I2C
-
-config PWM_MCUX_FTM
-	default y
-	depends on PWM
-
 config SPI
 	default n
-
-config SPI_MCUX_DSPI
-	default y
-	depends on SPI
 
 config ETH_MCUX
 	default y
@@ -67,10 +41,6 @@ config ENTROPY_MCUX_RNGA
 config SOC_FLASH_MCUX
 	default y
 	depends on FLASH
-
-config UART_MCUX
-	default y
-	depends on SERIAL
 
 config USB_KINETIS
 	default y

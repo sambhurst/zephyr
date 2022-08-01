@@ -29,28 +29,9 @@ config CLOCK_CONTROL_INIT_PRIORITY
 	default 1
 	depends on CLOCK_CONTROL
 
-config UART_STM32
-	default y
-	depends on SERIAL
-
-if GPIO
-
-config GPIO_STM32
-	default y
-
-endif # GPIO
-
 config PINMUX_STM32
 	default y
 	depends on PINMUX
-
-config PWM_STM32
-	default y
-	depends on PWM
-
-config SPI_STM32
-	default y
-	depends on SPI
 
 config I2S_STM32
 	default y

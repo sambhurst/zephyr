@@ -186,9 +186,14 @@ static int mcux_lpuart_err_check(const struct device *dev)
 		err |= UART_ERROR_FRAMING;
 	}
 
+	if (flags & kLPUART_NoiseErrorFlag) {
+		err |= UART_ERROR_PARITY;
+	}
+
 	LPUART_ClearStatusFlags(config->base, kLPUART_RxOverrunFlag |
 					      kLPUART_ParityErrorFlag |
-					      kLPUART_FramingErrorFlag);
+					      kLPUART_FramingErrorFlag |
+						  kLPUART_NoiseErrorFlag);
 
 	return err;
 }
@@ -782,7 +787,8 @@ static int mcux_lpuart_rx_enable(const struct device *dev, uint8_t *buf, const s
 	/* Clear these status flags as they can prevent the UART device from receiving data */
 	LPUART_ClearStatusFlags(config->base, kLPUART_RxOverrunFlag |
 					      kLPUART_ParityErrorFlag |
-					      kLPUART_FramingErrorFlag);
+					      kLPUART_FramingErrorFlag |
+						  kLPUART_NoiseErrorFlag);
 	LPUART_EnableRx(lpuart, true);
 	irq_unlock(key);
 	return ret;
@@ -1088,7 +1094,7 @@ static const struct uart_driver_api mcux_lpuart_driver_api = {
 			    mcux_lpuart_isr, DEVICE_DT_INST_GET(n), 0);	\
 									\
 		irq_enable(DT_INST_IRQ_BY_IDX(n, i, irq));		\
-	} while (0)
+	} while (false)
 #define MCUX_LPUART_IRQ_INIT(n) .irq_config_func = mcux_lpuart_config_func_##n,
 #define MCUX_LPUART_IRQ_DEFINE(n)						\
 	static void mcux_lpuart_config_func_##n(const struct device *dev)	\
