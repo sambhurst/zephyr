@@ -975,6 +975,11 @@ static int adc_stm32_init(const struct device *dev)
 
 	LOG_DBG("Initializing....");
 
+	if (!device_is_ready(clk)) {
+		LOG_ERR("clock control device not ready");
+		return -ENODEV;
+	}
+
 	data->dev = dev;
 #if defined(CONFIG_SOC_SERIES_STM32F0X) || \
 	defined(CONFIG_SOC_SERIES_STM32G0X) || \
@@ -1180,7 +1185,8 @@ bool adc_stm32_is_irq_active(ADC_TypeDef *adc)
 }
 
 #define HANDLE_IRQS(index)							\
-	static const struct device *dev_##index = DEVICE_DT_INST_GET(index);	\
+	static const struct device *const dev_##index =				\
+		DEVICE_DT_INST_GET(index);					\
 	const struct adc_stm32_cfg *cfg_##index = dev_##index->config;		\
 	ADC_TypeDef *adc_##index = (ADC_TypeDef *)(cfg_##index->base);		\
 										\

@@ -129,6 +129,9 @@ set_property(TARGET compiler-cpp PROPERTY dialect_cpp20 "-std=c++20"
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp2b "-std=c++2b"
   "-Wno-register" "-Wno-volatile")
 
+# Flag for disabling strict aliasing rule in C and C++
+set_compiler_property(PROPERTY no_strict_aliasing -fno-strict-aliasing)
+
 # Disable exceptions flag in C++
 set_property(TARGET compiler-cpp PROPERTY no_exceptions "-fno-exceptions")
 
@@ -174,12 +177,7 @@ set_compiler_property(PROPERTY no_common -fno-common)
 # GCC compiler flags for imacros. The specific header must be appended by user.
 set_compiler_property(PROPERTY imacros -imacros)
 
-# GCC compiler flags for sanitizing.
-set_compiler_property(PROPERTY sanitize_address -fsanitize=address)
-
 set_compiler_property(PROPERTY gprof -pg)
-
-set_compiler_property(PROPERTY sanitize_undefined -fsanitize=undefined)
 
 # GCC compiler flag for turning off thread-safe initialization of local statics
 set_property(TARGET compiler-cpp PROPERTY no_threadsafe_statics "-fno-threadsafe-statics")
