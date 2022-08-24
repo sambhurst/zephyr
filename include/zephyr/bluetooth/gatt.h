@@ -172,7 +172,10 @@ struct bt_gatt_attr {
 	void *user_data;
 	/** Attribute handle */
 	uint16_t handle;
-	/** Attribute permissions */
+	/** @brief Attribute permissions.
+	 *
+	 * Will be 0 if returned from bt_gatt_discover().
+	 */
 	uint16_t perm;
 };
 
@@ -618,6 +621,9 @@ ssize_t bt_gatt_attr_read_service(struct bt_conn *conn,
  *  @brief Secondary Service Declaration Macro.
  *
  *  Helper macro to declare a secondary service attribute.
+ *
+ *  @note A secondary service is only intended to be included from a primary
+ *  service or another secondary service or other higher layer specification.
  *
  *  @param _service Service attribute value.
  */
@@ -1455,8 +1461,9 @@ struct bt_gatt_discover_params {
  *
  *  This procedure is used by a client to discover attributes on a server.
  *
- *  Primary Service Discovery: Procedure allows to discover specific Primary
- *                             Service based on UUID.
+ *  Primary Service Discovery: Procedure allows to discover primary services
+ *                             either by Discover All Primary Services or
+ *                             Discover Primary Services by Service UUID.
  *  Include Service Discovery: Procedure allows to discover all Include Services
  *                             within specified range.
  *  Characteristic Discovery:  Procedure allows to discover all characteristics
