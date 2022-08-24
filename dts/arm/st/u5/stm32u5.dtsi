@@ -534,9 +534,22 @@
 			clocks = <&rcc STM32_CLOCK_BUS_AHB2 0x00000400>;
 			interrupts = <37 0>;
 			status = "disabled";
+			vref-mv = <3300>;
 			#io-channel-cells = <1>;
 			has-temp-channel;
 			has-vref-channel;
+		};
+
+		die_temp: dietemp {
+			compatible = "st,stm32-temp-cal";
+			ts-cal1-addr = <0x0BFA0710>;
+			ts-cal2-addr = <0x0BFA0742>;
+			ts-cal1-temp = <30>;
+			ts-cal2-temp = <130>;
+			ts-cal-vrefanalog = <3000>;
+			ts-cal-resolution = <14>;
+			io-channels = <&adc1 19>;
+			status = "disabled";
 		};
 
 		adc4: adc@46021000 {
@@ -581,6 +594,19 @@
 			reg = <0x4000dc00 0x400>;
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00800000>;
 			interrupts = <106 0>;
+			status = "disabled";
+		};
+
+		gpdma1: dma@40020000 {
+			compatible = "st,stm32u5-dma";
+			#dma-cells = <3>;
+			reg = <0x40020000 0x400>;
+			interrupts = <29 0 30 0 31 0 32 0 33 0 34 0 35 0 36 0
+					80 0 81 0 82 0 83 0 84 0 85 0 86 0 87 0>;
+			clocks = <&rcc STM32_CLOCK_BUS_AHB1 0x1>;
+			dma-channels = <16>;
+			dma-requests = <114>;
+			dma-offset = <0>;
 			status = "disabled";
 		};
 	};
