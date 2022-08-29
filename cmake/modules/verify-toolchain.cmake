@@ -17,8 +17,8 @@
 
 include_guard(GLOBAL)
 
-# This is the minimum required Zephyr-SDK version which supports CMake package
-set(TOOLCHAIN_ZEPHYR_MINIMUM_REQUIRED_VERSION 0.13.1)
+# This is the minimum required Zephyr SDK version.
+set(TOOLCHAIN_ZEPHYR_MINIMUM_REQUIRED_VERSION 0.15)
 
 # Set internal variables if set in environment.
 if(NOT DEFINED ZEPHYR_TOOLCHAIN_VARIANT)
@@ -120,7 +120,7 @@ if(NOT DEFINED ZEPHYR_TOOLCHAIN_VARIANT)
 
   message(FATAL_ERROR "${error_msg}
 The Zephyr SDK can be downloaded from:
-https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${TOOLCHAIN_ZEPHYR_MINIMUM_REQUIRED_VERSION}/zephyr-sdk-${TOOLCHAIN_ZEPHYR_MINIMUM_REQUIRED_VERSION}-setup.run
+https://github.com/zephyrproject-rtos/sdk-ng/releases/tag/v${TOOLCHAIN_ZEPHYR_MINIMUM_REQUIRED_VERSION}
 ")
 
 endif()

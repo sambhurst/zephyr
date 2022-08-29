@@ -13,8 +13,7 @@ with additional expansion ports around the Arduino footprint, along
 with a PMod/host interface port and MikroElektronika Click module
 site.
 
-.. image:: ./lpcxpresso55S36.jpg
-   :width: 720px
+.. image:: lpcxpresso55S36.jpg
    :align: center
    :alt: LPCXpresso55S36
 
@@ -66,6 +65,8 @@ The Zephyr configuration for the LPC55S36 board (lpcxpresso55s36) is as follows:
 | CLOCK     | on-chip    | clock_control                       |
 +-----------+------------+-------------------------------------+
 | CAN       | on-chip    | canbus                              |
++-----------+------------+-------------------------------------+
+| IAP       | on-chip    | flash                               |
 +-----------+------------+-------------------------------------+
 
 Other hardware features are not currently enabled.
