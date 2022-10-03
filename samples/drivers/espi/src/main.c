@@ -5,7 +5,7 @@
  */
 
 #include <errno.h>
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <soc.h>
 #include <zephyr/drivers/gpio.h>
@@ -62,7 +62,7 @@ static uint8_t flash_read_buf[MAX_TEST_BUF_SIZE];
 #endif
 
 #ifdef CONFIG_ESPI_SAF
-#define SAF_BASE_ADDR     DT_REG_ADDR(ESPI_SAF_NODE)
+#define SAF_BASE_ADDR   DT_REG_ADDR(DT_NODELABEL(espi_saf0))
 
 #define SAF_TEST_FREQ_HZ 24000000U
 #define SAF_TEST_BUF_SIZE 4096U

@@ -33,4 +33,22 @@ config SYS_CLOCK_HW_CYCLES_PER_SEC
 	default 400000000 if XTENSA_TIMER
 	default 19200000 if INTEL_ADSP_TIMER
 
+if DAI_INTEL_SSP
+
+config DAI_SSP_CLK_FORCE_DYNAMIC_CLOCK_GATING
+	default y
+
+config DAI_INTEL_SSP_NUM_BASE
+	default 4
+
+config DAI_INTEL_SSP_NUM_EXT
+	default 2
+
+endif # DAI_INTEL_SSP
+
+config ADSP_INIT_HPSRAM
+	default n
+
+config ADSP_DISABLE_L2CACHE_AT_BOOT
+	default y
 endif

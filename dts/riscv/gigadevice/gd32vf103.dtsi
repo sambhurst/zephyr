@@ -9,6 +9,7 @@
 #include <zephyr/dt-bindings/timer/nuclei-systimer.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/clock/gd32vf103-clocks.h>
 #include <zephyr/dt-bindings/reset/gd32vf103.h>
 
 / {
@@ -61,6 +62,12 @@
 			reg = <0x40021000 0x400>;
 			status = "okay";
 
+			cctl: clock-controller {
+				compatible = "gd,gd32-cctl";
+				#clock-cells = <1>;
+				status = "okay";
+			};
+
 			rctl: reset-controller {
 				compatible = "gd,gd32-rctl";
 				#reset-cells = <1>;
@@ -75,8 +82,10 @@
 			#size-cells = <1>;
 
 			flash0: flash@8000000 {
-				compatible = "soc-nv-flash";
+				compatible = "gd,gd32-nv-flash-v1", "soc-nv-flash";
 				write-block-size = <2>;
+				max-erase-time-ms = <300>;
+				page-size = <DT_SIZE_K(1)>;
 			};
 		};
 
@@ -84,7 +93,7 @@
 			compatible = "gd,gd32-usart";
 			reg = <0x40013800 0x400>;
 			interrupts = <56 0>;
-			rcu-periph-clock = <0x60e>;
+			clocks = <&cctl GD32_CLOCK_USART0>;
 			resets = <&rctl GD32_RESET_USART0>;
 			status = "disabled";
 		};
@@ -93,7 +102,7 @@
 			compatible = "gd,gd32-usart";
 			reg = <0x40004400 0x400>;
 			interrupts = <57 0>;
-			rcu-periph-clock = <0x711>;
+			clocks = <&cctl GD32_CLOCK_USART1>;
 			resets = <&rctl GD32_RESET_USART1>;
 			status = "disabled";
 		};
@@ -102,7 +111,7 @@
 			compatible = "gd,gd32-usart";
 			reg = <0x40004800 0x400>;
 			interrupts = <58 0>;
-			rcu-periph-clock = <0x712>;
+			clocks = <&cctl GD32_CLOCK_USART2>;
 			resets = <&rctl GD32_RESET_USART2>;
 			status = "disabled";
 		};
@@ -111,7 +120,7 @@
 			compatible = "gd,gd32-adc";
 			reg = <0x40012400 0x400>;
 			interrupts = <37 0>;
-			rcu-periph-clock = <0x609>;
+			clocks = <&cctl GD32_CLOCK_ADC0>;
 			resets = <&rctl GD32_RESET_ADC0>;
 			channels = <16>;
 			status = "disabled";
@@ -122,7 +131,7 @@
 			compatible = "gd,gd32-adc";
 			reg = <0x40012800 0x400>;
 			interrupts = <37 0>;
-			rcu-periph-clock = <0x60A>;
+			clocks = <&cctl GD32_CLOCK_ADC1>;
 			resets = <&rctl GD32_RESET_ADC1>;
 			channels = <16>;
 			status = "disabled";
@@ -132,7 +141,7 @@
 		dac: dac@40007400 {
 			compatible = "gd,gd32-dac";
 			reg = <0x40007400 0x400>;
-			rcu-periph-clock = <0x71d>;
+			clocks = <&cctl GD32_CLOCK_DAC>;
 			resets = <&rctl GD32_RESET_DAC>;
 			num-channels = <2>;
 			status = "disabled";
@@ -147,7 +156,8 @@
 			clock-frequency = <I2C_BITRATE_STANDARD>;
 			interrupts = <50 0>, <51 0>;
 			interrupt-names = "event", "error";
-			rcu-periph-clock = <0x715>;
+			clocks = <&cctl GD32_CLOCK_I2C0>;
+			resets = <&rctl GD32_RESET_I2C0>;
 			status = "disabled";
 		};
 
@@ -155,7 +165,7 @@
 			compatible = "gd,gd32-spi";
 			reg = <0x40013000 0x400>;
 			interrupts = <54 0>;
-			rcu-periph-clock = <0x60c>;
+			clocks = <&cctl GD32_CLOCK_SPI0>;
 			resets = <&rctl GD32_RESET_SPI0>;
 			status = "disabled";
 			#address-cells = <1>;
@@ -166,7 +176,7 @@
 			compatible = "gd,gd32-spi";
 			reg = <0x40003800 0x400>;
 			interrupts = <55 0>;
-			rcu-periph-clock = <0x70e>;
+			clocks = <&cctl GD32_CLOCK_SPI1>;
 			resets = <&rctl GD32_RESET_SPI1>;
 			status = "disabled";
 			#address-cells = <1>;
@@ -176,7 +186,7 @@
 		afio: afio@40010000 {
 			compatible = "gd,gd32-afio";
 			reg = <0x40010000 0x400>;
-			rcu-periph-clock = <0x600>;
+			clocks = <&cctl GD32_CLOCK_AFIO>;
 			status = "okay";
 		};
 
@@ -194,6 +204,21 @@
 			status = "okay";
 		};
 
+		fwdgt: watchdog@40003000 {
+			compatible = "gd,gd32-fwdgt";
+			reg = <0x40003000 0x400>;
+			status = "disabled";
+		};
+
+		wwdgt: watchdog@40002c00 {
+			compatible = "gd,gd32-wwdgt";
+			reg = <0x40002C00 0x400>;
+			clocks = <&cctl GD32_CLOCK_WWDGT>;
+			resets = <&rctl GD32_RESET_WWDGT>;
+			interrupts = <0 0>;
+			status = "disabled";
+		};
+
 		pinctrl: pin-controller@40010800 {
 			compatible = "gd,gd32-pinctrl-afio";
 			reg = <0x40010800 0x1c00>;
@@ -206,7 +231,7 @@
 				reg = <0x40010800 0x400>;
 				gpio-controller;
 				#gpio-cells = <2>;
-				rcu-periph-clock = <0x602>;
+				clocks = <&cctl GD32_CLOCK_GPIOA>;
 				resets = <&rctl GD32_RESET_GPIOA>;
 				status = "disabled";
 			};
@@ -216,7 +241,7 @@
 				reg = <0x40010c00 0x400>;
 				gpio-controller;
 				#gpio-cells = <2>;
-				rcu-periph-clock = <0x603>;
+				clocks = <&cctl GD32_CLOCK_GPIOB>;
 				resets = <&rctl GD32_RESET_GPIOB>;
 				status = "disabled";
 			};
@@ -226,7 +251,7 @@
 				reg = <0x40011000 0x400>;
 				gpio-controller;
 				#gpio-cells = <2>;
-				rcu-periph-clock = <0x604>;
+				clocks = <&cctl GD32_CLOCK_GPIOC>;
 				resets = <&rctl GD32_RESET_GPIOC>;
 				status = "disabled";
 			};
@@ -236,7 +261,7 @@
 				reg = <0x40011400 0x400>;
 				gpio-controller;
 				#gpio-cells = <2>;
-				rcu-periph-clock = <0x605>;
+				clocks = <&cctl GD32_CLOCK_GPIOD>;
 				resets = <&rctl GD32_RESET_GPIOD>;
 				status = "disabled";
 			};
@@ -246,7 +271,7 @@
 				reg = <0x40011800 0x400>;
 				gpio-controller;
 				#gpio-cells = <2>;
-				rcu-periph-clock = <0x606>;
+				clocks = <&cctl GD32_CLOCK_GPIOE>;
 				resets = <&rctl GD32_RESET_GPIOE>;
 				status = "disabled";
 			};
@@ -257,7 +282,7 @@
 			reg = <0x40012c00 0x400>;
 			interrupts = <43 0>, <44 0>, <45 0>, <46 0>;
 			interrupt-names = "brk", "up", "trgcom", "cc";
-			rcu-periph-clock = <0x60b>;
+			clocks = <&cctl GD32_CLOCK_TIMER0>;
 			resets = <&rctl GD32_RESET_TIMER0>;
 			is-advanced;
 			channels = <4>;
@@ -275,7 +300,7 @@
 			reg = <0x40000000 0x400>;
 			interrupts = <47 0>;
 			interrupt-names = "global";
-			rcu-periph-clock = <0x700>;
+			clocks = <&cctl GD32_CLOCK_TIMER1>;
 			resets = <&rctl GD32_RESET_TIMER1>;
 			channels = <4>;
 			status = "disabled";
@@ -292,7 +317,7 @@
 			reg = <0x40000400 0x400>;
 			interrupts = <48 0>;
 			interrupt-names = "global";
-			rcu-periph-clock = <0x701>;
+			clocks = <&cctl GD32_CLOCK_TIMER2>;
 			resets = <&rctl GD32_RESET_TIMER2>;
 			channels = <4>;
 			status = "disabled";
@@ -309,7 +334,7 @@
 			reg = <0x40000800 0x400>;
 			interrupts = <49 0>;
 			interrupt-names = "global";
-			rcu-periph-clock = <0x702>;
+			clocks = <&cctl GD32_CLOCK_TIMER3>;
 			resets = <&rctl GD32_RESET_TIMER3>;
 			channels = <4>;
 			status = "disabled";
@@ -326,7 +351,7 @@
 			reg = <0x40000c00 0x400>;
 			interrupts = <69 0>;
 			interrupt-names = "global";
-			rcu-periph-clock = <0x703>;
+			clocks = <&cctl GD32_CLOCK_TIMER4>;
 			resets = <&rctl GD32_RESET_TIMER4>;
 			channels = <4>;
 			status = "disabled";
@@ -343,7 +368,7 @@
 			reg = <0x40001000 0x400>;
 			interrupts = <73 0>;
 			interrupt-names = "global";
-			rcu-periph-clock = <0x704>;
+			clocks = <&cctl GD32_CLOCK_TIMER5>;
 			resets = <&rctl GD32_RESET_TIMER5>;
 			channels = <0>;
 			status = "disabled";
@@ -354,7 +379,7 @@
 			reg = <0x40001400 0x400>;
 			interrupts = <74 0>;
 			interrupt-names = "global";
-			rcu-periph-clock = <0x705>;
+			clocks = <&cctl GD32_CLOCK_TIMER6>;
 			resets = <&rctl GD32_RESET_TIMER6>;
 			channels = <0>;
 			status = "disabled";
@@ -365,7 +390,7 @@
 			reg = <0x40020000 0x400>;
 			interrupts = <30 0>, <31 0>, <32 0>, <33 0>,
 				     <34 0>, <35 0>, <36 0>;
-			rcu-periph-clock = <0x500>;
+			clocks = <&cctl GD32_CLOCK_DMA0>;
 			dma-channels = <7>;
 			#dma-cells = <1>;
 			status = "disabled";
@@ -376,7 +401,7 @@
 			reg = <0x40020400 0x400>;
 			interrupts = <75 0>, <76 0>, <77 0>, <78 0>,
 				     <79 0>;
-			rcu-periph-clock = <0x501>;
+			clocks = <&cctl GD32_CLOCK_DMA0>;
 			dma-channels = <5>;
 			#dma-cells = <1>;
 			status = "disabled";

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/sdhc.h>
 #include <zephyr/sd/sd.h>
 #include <zephyr/sd/sdmmc.h>
@@ -949,6 +949,14 @@ static int sdmmc_init_hs(struct sd_card *card)
 	if (ret) {
 		LOG_ERR("Failed to switch card to HS mode");
 		return ret;
+	}
+	if (card->flags & SD_4BITS_WIDTH) {
+		/* Raise bus width to 4 bits */
+		ret = sdmmc_set_bus_width(card, SDHC_BUS_WIDTH4BIT);
+		if (ret) {
+			LOG_ERR("Failed to change card bus width to 4 bits");
+			return ret;
+		}
 	}
 	return 0;
 }

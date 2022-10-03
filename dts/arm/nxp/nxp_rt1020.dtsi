@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <nxp/nxp_rt.dtsi>
+#include <nxp/nxp_rt10xx.dtsi>
 
 &sysclk {
 	clock-frequency = <500000000>;
@@ -146,6 +146,7 @@
 		<&iomuxc_gpio_sd_b1_09_gpio3_io29>,
 		<&iomuxc_gpio_sd_b1_10_gpio3_io30>,
 		<&iomuxc_gpio_sd_b1_11_gpio3_io31>;
+	gpio-reserved-ranges = <10 3>;
 };
 
 &gpio5{

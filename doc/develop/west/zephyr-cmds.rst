@@ -27,6 +27,23 @@ Additional help about the formatting options can be found by running::
 
   west boards -h
 
+.. _west-completion:
+
+Shell completion scripts: ``west completion``
+*********************************************
+
+The ``completion`` extension command outputs shell completion scripts that can
+then be used directly to enable shell completion for the supported shells.
+
+It currently supports the following shells:
+
+- bash
+- zsh
+
+Additional instructions are available in the command's help::
+
+  west help completion
+
 .. _west-zephyr-export:
 
 Installing CMake packages: ``west zephyr-export``
@@ -102,7 +119,7 @@ source files that are compiled to generate the built library files.
 ``west spdx`` accepts these additional options:
 
 - ``-n PREFIX``: a prefix for the Document Namespaces that will be included in
-  the generated SPDX documents. See `SPDX specification 2.2 section 2.5`_ for
+  the generated SPDX documents. See `SPDX specification clause 6`_ for
   details. If ``-n`` is omitted, a default namespace will be generated
   according to the default format described in section 2.5 using a random UUID.
 
@@ -120,8 +137,8 @@ source files that are compiled to generate the built library files.
 - ``--include-sdk``: with ``--analyze-includes``, also create a fourth SPDX
   document, :file:`sdk.spdx`, which lists header files included from the SDK.
 
-.. _SPDX specification 2.2 section 2.5:
-   https://spdx.github.io/spdx-spec/2-document-creation-information/
+.. _SPDX specification clause 6:
+   https://spdx.github.io/spdx-spec/document-creation-information/
 
 .. _west-blobs:
 

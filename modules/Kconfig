@@ -38,6 +38,7 @@ source "modules/Kconfig.telink"
 source "modules/Kconfig.tinycbor"
 source "modules/Kconfig.tinycrypt"
 source "modules/Kconfig.vega"
+source "modules/Kconfig.wurthelektronik"
 source "modules/Kconfig.xtensa"
 source "modules/zcbor/Kconfig"
 source "modules/Kconfig.mcuboot_bootutil"
@@ -72,6 +73,9 @@ comment "mbedtls module not available."
 
 comment "Trusted-firmware-m module not available."
 	depends on !ZEPHYR_TRUSTED_FIRMWARE_M_MODULE
+
+comment "Trusted-firmware-a module not available."
+	depends on !ZEPHYR_TRUSTED_FIRMWARE_A_MODULE
 
 comment "Nanopb module not available."
 	depends on !ZEPHYR_NANOPB_MODULE

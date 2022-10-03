@@ -65,15 +65,6 @@ union cbprintf_package_hdr {
 #if defined(CONFIG_CBPRINTF_PACKAGE_HEADER_STORE_CREATION_FLAGS) && !defined(CONFIG_64BIT)
 	void *raw2[2];
 #endif
-} __packed;
-
-/** @brief cbprintf package header with format string pointer.
- *
- * cbprintf package header with format string pointer.
- */
-struct cbprintf_package_hdr_ext {
-	/** Header of package */
-	union cbprintf_package_hdr hdr;
 
 #ifdef CONFIG_CBPRINTF_PACKAGE_HEADER_STORE_CREATION_FLAGS
 #ifdef __xtensa__
@@ -86,6 +77,16 @@ struct cbprintf_package_hdr_ext {
 	uint32_t xtensa_padding;
 #endif
 #endif
+
+} __packed;
+
+/** @brief cbprintf package header with format string pointer.
+ *
+ * cbprintf package header with format string pointer.
+ */
+struct cbprintf_package_hdr_ext {
+	/** Header of package */
+	union cbprintf_package_hdr hdr;
 
 	/** Pointer to format string */
 	char *fmt;
@@ -212,6 +213,25 @@ BUILD_ASSERT(Z_IS_POW2(CBPRINTF_PACKAGE_ALIGNMENT));
  */
 #define CBPRINTF_PACKAGE_CONVERT_KEEP_RO_STR BIT(2)
 #define CBPRINTF_PACKAGE_COPY_KEEP_RO_STR CBPRINTF_PACKAGE_CONVERT_KEEP_RO_STR __DEPRECATED_MACRO
+
+/** @brief Check format string if %p argument was treated as %s in the package.
+ *
+ * Static packaging is done based only on types of arguments used for a format
+ * string. Without looking into format specifiers present in the string. Because
+ * of that if (unsigned) char pointer is used for %p it will be considered as
+ * a string location and during conversion an attempt to append a string to a
+ * package may be performed. This can lead to misbehavior, in the best case
+ * package will be bigger and in the worst case memory fault or security violation
+ * may occur.
+ *
+ * When this flag is set, format string will be checked to detect cases when
+ * string candidate is a pointer used for %p and string appending from unexpected
+ * location is avoided. Additionally, an log warning is generated to encourage
+ * user to cast such argument to void *. It is recommended because there are
+ * configurations where string is not accessible and inspection cannot be done.
+ * In those cases there are no means to detect such cases.
+ */
+#define CBPRINTF_PACKAGE_CONVERT_PTR_CHECK BIT(3)
 
 /**@} */
 
@@ -484,7 +504,7 @@ static inline int z_cbprintf_cpy(const void *buf, size_t len, void *ctx)
 		return -ENOSPC;
 	}
 
-	memcpy(&((uint8_t *)desc->buf)[desc->off], (void *)buf, len);
+	memcpy(&((uint8_t *)desc->buf)[desc->off], buf, len);
 	desc->off += len;
 
 	return len;

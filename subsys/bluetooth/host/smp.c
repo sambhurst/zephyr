@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <stddef.h>
 #include <errno.h>
 #include <string.h>
@@ -3144,7 +3144,8 @@ static uint8_t smp_pairing_req(struct bt_smp *smp, struct net_buf *buf)
 		}
 	}
 
-	if ((DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
+	if (!IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&
+	    (DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
 	    !atomic_test_bit(smp->flags, SMP_FLAG_SEC_REQ) &&
 	    smp_auth_cb && smp_auth_cb->pairing_confirm) {
 		atomic_set_bit(smp->flags, SMP_FLAG_USER);
@@ -3346,7 +3347,8 @@ static uint8_t smp_pairing_rsp(struct bt_smp *smp, struct net_buf *buf)
 		}
 	}
 
-	if ((DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
+	if (!IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&
+	    (DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
 	    atomic_test_bit(smp->flags, SMP_FLAG_SEC_REQ) &&
 	    smp_auth_cb && smp_auth_cb->pairing_confirm) {
 		atomic_set_bit(smp->flags, SMP_FLAG_USER);
@@ -5838,6 +5840,12 @@ void bt_smp_update_keys(struct bt_conn *conn)
 				     sizeof(conn->le.keys->ltk.rand));
 			(void)memset(conn->le.keys->ltk.ediv, 0,
 				     sizeof(conn->le.keys->ltk.ediv));
+		} else if (IS_ENABLED(CONFIG_BT_LOG_SNIFFER_INFO)) {
+			uint8_t ltk[16];
+
+			sys_memcpy_swap(ltk, smp->tk, conn->le.keys->enc_size);
+			BT_INFO("SC LTK: 0x%s (No bonding)",
+				bt_hex(ltk, conn->le.keys->enc_size));
 		}
 	} else {
 		conn->le.keys->flags &= ~BT_KEYS_SC;

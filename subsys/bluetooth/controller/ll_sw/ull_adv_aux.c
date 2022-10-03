@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <soc.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/sys/byteorder.h>
@@ -678,7 +678,7 @@ uint8_t ll_adv_aux_sr_data_set(uint8_t handle, uint8_t op, uint8_t frag_pref,
 	pri_pdu_prev = lll_adv_data_peek(lll);
 	if (pri_pdu_prev->type != PDU_ADV_TYPE_EXT_IND) {
 		if ((op != BT_HCI_LE_EXT_ADV_OP_COMPLETE_DATA) ||
-		    (len > PDU_AC_DATA_SIZE_MAX)) {
+		    (len > PDU_AC_LEG_DATA_SIZE_MAX)) {
 			return BT_HCI_ERR_INVALID_PARAM;
 		}
 		return ull_scan_rsp_set(adv, len, data);
@@ -2330,6 +2330,7 @@ void ull_adv_aux_ptr_fill(struct pdu_adv_aux_ptr *aux_ptr, uint32_t offs_us,
 			  uint8_t phy_s)
 {
 	uint32_t offs;
+	uint8_t phy;
 
 	/* NOTE: Channel Index and Aux Offset will be set on every advertiser's
 	 * event prepare when finding the auxiliary event's ticker offset.
@@ -2342,14 +2343,15 @@ void ull_adv_aux_ptr_fill(struct pdu_adv_aux_ptr *aux_ptr, uint32_t offs_us,
 
 	offs = offs_us / OFFS_UNIT_30_US;
 	if (!!(offs >> OFFS_UNIT_BITS)) {
-		aux_ptr->offs = offs / (OFFS_UNIT_300_US / OFFS_UNIT_30_US);
+		offs = offs / (OFFS_UNIT_300_US / OFFS_UNIT_30_US);
 		aux_ptr->offs_units = OFFS_UNIT_VALUE_300_US;
 	} else {
-		aux_ptr->offs = offs;
 		aux_ptr->offs_units = OFFS_UNIT_VALUE_30_US;
 	}
+	phy = find_lsb_set(phy_s) - 1;
 
-	aux_ptr->phy = find_lsb_set(phy_s) - 1;
+	aux_ptr->offs_phy_packed[0] = offs & 0xFF;
+	aux_ptr->offs_phy_packed[1] = ((offs>>8) & 0x1F) + (phy << 5);
 }
 
 #if (CONFIG_BT_CTLR_ADV_AUX_SET > 0)
@@ -2417,7 +2419,9 @@ uint32_t ull_adv_aux_evt_init(struct ll_adv_aux_set *aux,
 	if (!err) {
 		*ticks_anchor = ticks_anchor_aux;
 		*ticks_anchor += HAL_TICKER_US_TO_TICKS(
-			EVENT_TICKER_RES_MARGIN_US);
+					MAX(EVENT_MAFS_US,
+					    EVENT_OVERHEAD_START_US) +
+					(EVENT_TICKER_RES_MARGIN_US << 1));
 	}
 #endif /* CONFIG_BT_CTLR_SCHED_ADVANCED */
 
@@ -2629,12 +2633,13 @@ struct pdu_adv_aux_ptr *ull_adv_aux_lll_offset_fill(struct pdu_adv *pdu,
 	offs = HAL_TICKER_TICKS_TO_US(ticks_offset) + remainder_us - start_us;
 	offs = offs / OFFS_UNIT_30_US;
 	if (!!(offs >> OFFS_UNIT_BITS)) {
-		aux_ptr->offs = offs / (OFFS_UNIT_300_US / OFFS_UNIT_30_US);
+		offs = offs / (OFFS_UNIT_300_US / OFFS_UNIT_30_US);
 		aux_ptr->offs_units = OFFS_UNIT_VALUE_300_US;
 	} else {
-		aux_ptr->offs = offs;
 		aux_ptr->offs_units = OFFS_UNIT_VALUE_30_US;
 	}
+	aux_ptr->offs_phy_packed[0] = offs & 0xFF;
+	aux_ptr->offs_phy_packed[1] = ((offs>>8) & 0x1F) + (aux_ptr->offs_phy_packed[1] & 0xE0);
 
 	return aux_ptr;
 }

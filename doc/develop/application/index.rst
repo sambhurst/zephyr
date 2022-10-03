@@ -169,6 +169,7 @@ use of features commonly used in applications such as:
 - Custom devicetree bindings
 - Custom drivers
 - Continuous Integration (CI) setup
+- An example west :ref:`extension <west-extensions>` command
 
 Creating an Application
 ***********************
@@ -1359,7 +1360,7 @@ Create a Debugger Configuration
 
    - In the Main tab:
 
-     - Project: my_zephyr_app@build
+     - Project: ``my_zephyr_app@build``
      - C/C++ Application: :file:`zephyr/zephyr.elf`
 
    - In the Debugger tab:

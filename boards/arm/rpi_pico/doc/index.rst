@@ -53,10 +53,13 @@ hardware features:
      - :dtcompatible:`arm,v6m-nvic`
    * - UART
      - :kconfig:option:`CONFIG_SERIAL`
-     - :dtcompatible:`rpi,pico-uart`
+     - :dtcompatible:`raspberrypi,pico-uart`
    * - GPIO
      - :kconfig:option:`CONFIG_GPIO`
-     - :dtcompatible:`rpi,pico-gpio`
+     - :dtcompatible:`raspberrypi,pico-gpio`
+   * - ADC
+     - :kconfig:option:`CONFIG_ADC`
+     - :dtcompatible:`raspberrypi,pico-adc`
    * - I2C
      - :kconfig:option:`CONFIG_I2C`
      - :dtcompatible:`snps,designware-i2c`
@@ -76,14 +79,58 @@ hardware features:
      - :kconfig:option:`CONFIG_PWM`
      - :dtcompatible:`raspberrypi,pico-pwm`
 
+Pin Mapping
+===========
+
+The peripherals of the RP2040 SoC can be routed to various pins on the board.
+The configuration of these routes can be modified through DTS. Please refer to
+the datasheet to see the possible routings for each peripheral.
+
+Default Zephyr Peripheral Mapping:
+----------------------------------
+
+.. rst-class:: rst-columns
+
+- UART0_TX : P0
+- UART0_RX : P1
+- I2C0_SDA : P4
+- I2C0_SCL : P5
+- I2C1_SDA : P14
+- I2C1_SCL : P15
+- SPI0_RX : P16
+- SPI0_CSN : P17
+- SPI0_SCK : P18
+- SPI0_TX : P19
+- ADC_CH0 : P26
+- ADC_CH1 : P27
+- ADC_CH2 : P28
+- ADC_CH3 : P29
+
 Programming and Debugging
 *************************
 
 Flashing
 ========
 
-Using an SWD adapter
---------------------
+Using SEGGER JLink
+------------------
+
+You can Flash the rpi_pico with a SEGGER JLink debug probe as described in
+:ref:`Building, Flashing and Debugging <west-flashing>`.
+
+Here is an example of building and flashing the :ref:`blinky-sample` application.
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/basic/blinky
+   :board: rpi_pico
+   :goals: build
+
+.. code-block:: bash
+
+  west flash --runner jlink
+
+Using OpenOCD
+-------------
 
 To use PicoProbe, You must configure **udev**.
 
@@ -96,15 +143,15 @@ Create a file in /etc/udev.rules.d with any name, and write the line below.
 This example is valid for the case that the user joins to `plugdev` groups.
 
 The Raspberry Pi Pico has an SWD interface that can be used to program
-and debug the on board RP2040. This interface can be utilized by openocd.
-However, to use it with the RP2040, `fork of OpenOCD supporting RP2040`_ is needed.
+and debug the on board RP2040. This interface can be utilized by OpenOCD.
+However, to use it with the RP2040, a `fork of OpenOCD supporting RP2040`_ is needed.
 
-If you are using Debian based system (including RaspberryPi OS, Ubuntu. and more),
-using `pico_setup.sh`_ script is convenient to set up forked version of OpenOCD.
+If you are using a Debian based system (including RaspberryPi OS, Ubuntu. and more),
+using the `pico_setup.sh`_ script is a convenient way to set up the forked version of OpenOCD.
 
 Depending on the interface used (such as JLink), you might need to
 checkout to a branch that supports this interface, before proceeding.
-Build and install openocd as described in the README.
+Build and install OpenOCD as described in the README.
 
 Here is an example of building and flashing the :ref:`blinky-sample` application.
 
@@ -114,25 +161,26 @@ Here is an example of building and flashing the :ref:`blinky-sample` application
    :goals: build flash
    :gen-args: -DOPENOCD=/usr/local/bin/openocd -DOPENOCD_DEFAULT_PATH=/usr/local/share/openocd/scripts -DRPI_PICO_DEBUG_ADAPTER=picoprobe
 
-Set `/usr/local/bin/openocd` to **OPENOCD** and `/usr/local/share/openocd/scripts` to **OPENOCD_DEFAULT_PATH** will works
-with openocd that install with default configuration.
-This configuration also works with an environment that is set up by `pico_setup.sh`_ script.
+Set the environment variables **OPENOCD** to `/usr/local/bin/openocd`
+and **OPENOCD_DEFAULT_PATH** to `/usr/local/share/openocd/scripts`. This should work
+with the OpenOCD that was installed with the default configuration.
+This configuration also works with an environment that is set up by the `pico_setup.sh`_ script.
 
 **RPI_PICO_DEBUG_ADAPTER** specifies what debug adapter is used for debugging.
 
-If **RPI_PICO_DEBUG_ADAPTER** was not assigned, use `picoprobe` as default. And also able to use `raspberrypi-swd`.
+If **RPI_PICO_DEBUG_ADAPTER** was not assigned, `picoprobe` is used by default.
+The other supported adapters are `raspberrypi-swd`, `jlink` and `blackmagicprobe`.
 How to connect `picoprobe` and `raspberrypi-swd` is described in `Getting Started with Raspberry Pi Pico`_.
 Any other SWD debug adapter maybe also work with this configuration.
 
-**RPI_PICO_DEBUG_ADAPTER** value remember into CMakeCache.txt.
-So you can omit the option in `west flash` and `west debug` execution,
-you need only the `west build` case.
+The value of **RPI_PICO_DEBUG_ADAPTER** is cached, so it can be omitted from
+`west flash` and `west debug` if it was previously set while running `west build`.
 
-**RPI_PICO_DEBUG_ADAPTER** is used in an argument to openocd as `"source [find interface/${RPI_PICO_DEBUG_ADAPTER}.cfg]"`.
-Thus, **RPI_PICO_DEBUG_ADAPTER** needs to assign from the definition file name of debugging adapter.
+**RPI_PICO_DEBUG_ADAPTER** is used in an argument to OpenOCD as `"source [find interface/${RPI_PICO_DEBUG_ADAPTER}.cfg]"`.
+Thus, **RPI_PICO_DEBUG_ADAPTER** needs to be assigned the file name of the debug adapter.
 
 You can also flash the board with the following
-command that directly call openocd (assuming JLink is used):
+command that directly calls OpenOCD (assuming a SEGGER JLink adapter is used):
 
 .. code-block:: console
 
@@ -150,8 +198,20 @@ UF2 file should be drag-and-dropped to the device, which will flash the Pico.
 Debugging
 =========
 
-The SWD interface can also be used to debug the board. To achieve this,
-install openocd as described for flashing the board.
+The SWD interface can also be used to debug the board. To achieve this, you can
+either use SEGGER JLink or OpenOCD.
+
+Using SEGGER JLink
+------------------
+
+Use a SEGGER JLink debug probe and follow the instruction in
+:ref:`Building, Flashing and Debugging<west-debugging>`.
+
+
+Using OpenOCD
+-------------
+
+Install OpenOCD as described for flashing the board.
 
 .. note::
   `fork of OpenOCD supporting RP2040`_ does not provide ZephyrRTOS enhancement.
@@ -169,7 +229,7 @@ Here is an example for debugging the :ref:`blinky-sample` application.
 As with flashing, you can specify the debug adapter by specifying **RPI_PICO_DEBUG_ADAPTER**
 at `west build` time. No needs to specify it at `west debug` time.
 
-You can also debugging with openocd and gdb launching from command-line.
+You can also debug with OpenOCD and gdb launching from command-line.
 Run the following command:
 
 .. code-block:: console

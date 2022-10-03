@@ -20,9 +20,18 @@
  * @{
  * @}
  */
+
+/**
+ * @brief Device Model
+ * @defgroup device_model Device Model
+ * @{
+ * @}
+ */
+
 /**
  * @brief Device Model APIs
- * @defgroup device_model Device Model APIs
+ * @defgroup device_model_api Device Model APIs
+ * @ingroup device_model
  * @{
  */
 
@@ -108,16 +117,6 @@ typedef int16_t device_handle_t;
  * dev_name.
  */
 #define Z_DEVICE_STATE_NAME(dev_name) _CONCAT(__devstate_, dev_name)
-
-/**
- * @brief Utility macro to define and initialize the device state.
- *
- * @param node_id Devicetree node id of the device.
- * @param dev_name Device name.
- */
-#define Z_DEVICE_STATE_DEFINE(node_id, dev_name)			\
-	static struct device_state Z_DEVICE_STATE_NAME(dev_name)	\
-	__attribute__((__section__(".z_devstate")));
 
 /**
  * @brief Create a device object and set it up for boot time initialization.
@@ -915,7 +914,7 @@ BUILD_ASSERT(sizeof(device_handle_t) == 2, "fix the linker scripts");
 		.api = (api_ptr),					\
 		.state = (state_ptr),					\
 		.data = (data_ptr),					\
-		COND_CODE_1(CONFIG_PM_DEVICE, (.pm = pm_device,), ())	\
+		IF_ENABLED(CONFIG_PM_DEVICE, (.pm = pm_device,))	\
 		Z_DEVICE_DEFINE_INIT(node_id, dev_name)			\
 	};								\
 	BUILD_ASSERT(sizeof(Z_STRINGIFY(drv_name)) <= Z_DEVICE_MAX_NAME_LEN, \

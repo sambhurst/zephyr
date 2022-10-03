@@ -9,7 +9,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/check.h>
 
@@ -206,8 +206,6 @@ static void unicast_client_ep_iso_disconnected(struct bt_iso_chan *chan,
 	} else {
 		BT_WARN("No callback for stopped set");
 	}
-
-	bt_unicast_client_ep_set_state(ep, BT_AUDIO_EP_STATE_QOS_CONFIGURED);
 }
 
 static struct bt_iso_chan_ops unicast_client_iso_ops = {
@@ -270,12 +268,16 @@ void bt_unicast_client_stream_bind_audio_iso(struct bt_audio_stream *stream,
 		 */
 		audio_iso->sink_stream = stream;
 		qos->rx = &audio_iso->sink_io_qos;
+		qos->rx->path = &audio_iso->sink_path;
+		qos->rx->path->cc = audio_iso->sink_path_cc;
 	} else if (dir == BT_AUDIO_DIR_SINK) {
 		/* If the endpoint is a sink, then we need to
 		 * configure our TX parameters
 		 */
 		audio_iso->source_stream = stream;
 		qos->tx = &audio_iso->source_io_qos;
+		qos->tx->path = &audio_iso->source_path;
+		qos->tx->path->cc = audio_iso->source_path_cc;
 	} else {
 		__ASSERT(false, "Invalid dir: %u", dir);
 	}
@@ -612,6 +614,24 @@ static void unicast_client_ep_qos_state(struct bt_audio_ep *ep,
 	/* Disconnect ISO if connected */
 	if (stream->iso->state == BT_ISO_STATE_CONNECTED) {
 		bt_audio_stream_disconnect(stream);
+	} else {
+		/* We setup the data path here, as this is the earliest where
+		 * we have the ISO <-> EP coupling completed (due to setting
+		 * the CIS ID in the QoS procedure).
+		 */
+		if (ep->dir == BT_AUDIO_DIR_SOURCE) {
+			/* If the endpoint is a source, then we need to
+			 * configure our RX parameters
+			 */
+			bt_audio_codec_to_iso_path(&ep->iso->sink_path,
+						   stream->codec);
+		} else {
+			/* If the endpoint is a sink, then we need to
+			 * configure our TX parameters
+			 */
+			bt_audio_codec_to_iso_path(&ep->iso->source_path,
+						   stream->codec);
+		}
 	}
 
 	/* Notify upper layer */
@@ -1042,33 +1062,6 @@ fail:
 	codec->meta_count = 0;
 	(void)memset(codec->meta, 0, sizeof(codec->meta));
 	return err;
-}
-
-void bt_unicast_client_ep_set_state(struct bt_audio_ep *ep, uint8_t state)
-{
-	uint8_t old_state;
-
-	if (!ep) {
-		return;
-	}
-
-	BT_DBG("ep %p id 0x%02x %s -> %s", ep, ep->status.id,
-	       bt_audio_ep_state_str(ep->status.state),
-	       bt_audio_ep_state_str(state));
-
-	old_state = ep->status.state;
-	ep->status.state = state;
-
-	if (!ep->stream || old_state == state) {
-		return;
-	}
-
-	if (state == BT_AUDIO_EP_STATE_CODEC_CONFIGURED) {
-		bt_unicast_client_ep_unbind_audio_iso(ep);
-	} else if (state == BT_AUDIO_EP_STATE_IDLE) {
-		bt_unicast_client_ep_unbind_audio_iso(ep);
-		bt_audio_stream_detach(ep->stream);
-	}
 }
 
 static uint8_t unicast_client_cp_notify(struct bt_conn *conn,
@@ -2065,7 +2058,7 @@ static uint8_t unicast_client_pacs_avail_ctx_discover_cb(struct bt_conn *conn,
 			sub_params->value = BT_GATT_CCC_NOTIFY;
 
 			err = bt_gatt_subscribe(conn, sub_params);
-			if (err != 0) {
+			if (err != 0 && err != -EALREADY) {
 				BT_ERR("Failed to subscribe to avail_ctx: %d", err);
 			}
 		} /* else already subscribed */
@@ -2260,7 +2253,7 @@ static uint8_t unicast_client_pacs_location_discover_cb(struct bt_conn *conn,
 		sub_params->value = BT_GATT_CCC_NOTIFY;
 
 		err = bt_gatt_subscribe(conn, sub_params);
-		if (err != 0) {
+		if (err != 0 && err != -EALREADY) {
 			BT_ERR("Failed to subscribe to location: %d", err);
 		}
 	}

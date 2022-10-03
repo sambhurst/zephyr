@@ -8,7 +8,7 @@
 
 
 #include <zephyr/devicetree.h>
-#include <cavs-vectors.h>
+#include <adsp-vectors.h>
 
 #define L2_SRAM_BASE (DT_REG_ADDR(DT_NODELABEL(sram0)))
 #define L2_SRAM_SIZE (DT_REG_SIZE(DT_NODELABEL(sram0)))
@@ -44,5 +44,14 @@
 #define IMR_BOOT_LDR_TEXT_ENTRY_BASE (IMR_BOOT_LDR_MANIFEST_BASE + 0x6000)
 
 #define ADSP_L1_CACHE_PREFCTL_VALUE 0
+
+#define ADSP_L2CC_ADDR          (DT_REG_ADDR(DT_NODELABEL(l2cc)))
+#define ADSP_L2PCFG_ADDR        (ADSP_L2CC_ADDR + 0x08)
+
+#if (!defined(_ASMLANGUAGE) && !defined(__ASSEMBLER__))
+
+#define ADSP_L2PCFG_REG (*(volatile uint32_t *)(ADSP_L2PCFG_ADDR))
+
+#endif
 
 #endif /* ZEPHYR_SOC_INTEL_ADSP_MEMORY_H_ */

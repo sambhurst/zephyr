@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
+#include <zephyr/kernel.h>
 #include <soc.h>
 #include <zephyr/bluetooth/hci.h>
 
@@ -639,12 +639,21 @@ uint8_t ull_scan_disable(uint8_t handle, struct ll_scan_set *scan)
 
 		aux_scan = HDR_LLL2ULL(aux_scan_lll);
 		if (aux_scan == scan) {
+			void *parent;
+
 			err = ull_scan_aux_stop(aux);
 			if (err && (err != -EALREADY)) {
 				return BT_HCI_ERR_CMD_DISALLOWED;
 			}
 
-			LL_ASSERT(!aux->parent);
+			/* Use a local variable to assert on auxiliary context's
+			 * release.
+			 * Under race condition a released aux context can be
+			 * allocated for reception of chain PDU of a periodic
+			 * sync role.
+			 */
+			parent = aux->parent;
+			LL_ASSERT(!parent || (parent != aux_scan_lll));
 		}
 	}
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
