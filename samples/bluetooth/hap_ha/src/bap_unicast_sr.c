@@ -14,7 +14,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/audio/audio.h>
-#include <zephyr/bluetooth/audio/capabilities.h>
+#include <zephyr/bluetooth/audio/pacs.h>
 
 NET_BUF_POOL_FIXED_DEFINE(tx_pool, CONFIG_BT_ASCS_ASE_SRC_COUNT,
 			  BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
@@ -31,14 +31,14 @@ static struct k_work_delayable audio_send_work;
 static struct bt_audio_stream streams[CONFIG_BT_ASCS_ASE_SNK_COUNT + CONFIG_BT_ASCS_ASE_SRC_COUNT];
 static struct bt_audio_source {
 	struct bt_audio_stream *stream;
-	uint32_t seq_num;
+	uint16_t seq_num;
 } source_streams[CONFIG_BT_ASCS_ASE_SRC_COUNT];
 static size_t configured_source_stream_count;
 
 static const struct bt_codec_qos_pref qos_pref = BT_CODEC_QOS_PREF(true, BT_GAP_LE_PHY_2M, 0x02,
 								   10, 20000, 40000, 20000, 40000);
 
-static uint32_t get_and_incr_seq_num(const struct bt_audio_stream *stream)
+static uint16_t get_and_incr_seq_num(const struct bt_audio_stream *stream)
 {
 	for (size_t i = 0U; i < configured_source_stream_count; i++) {
 		if (stream == source_streams[i].stream) {
@@ -411,25 +411,41 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.disconnected = disconnected,
 };
 
-static struct bt_audio_capability caps[] = {
-	{
-		.dir = BT_AUDIO_DIR_SINK,
-		.codec = &lc3_codec,
-	},
-#if defined(CONFIG_BT_ASCS_ASE_SRC)
-	{
-		.dir = BT_AUDIO_DIR_SOURCE,
-		.codec = &lc3_codec,
-	}
-#endif /* CONFIG_BT_ASCS_ASE_SRC */
+static struct bt_pacs_cap cap_sink = {
+	.codec = &lc3_codec,
+};
+
+static struct bt_pacs_cap cap_source = {
+	.codec = &lc3_codec,
 };
 
 int bap_unicast_sr_init(void)
 {
 	bt_audio_unicast_server_register_cb(&unicast_server_cb);
 
-	for (size_t i = 0; i < ARRAY_SIZE(caps); i++) {
-		bt_audio_capability_register(&caps[i]);
+	bt_pacs_cap_register(BT_AUDIO_DIR_SINK, &cap_sink);
+
+	if (IS_ENABLED(CONFIG_BT_PAC_SNK_LOC)) {
+		if (IS_ENABLED(CONFIG_HAP_HA_HEARING_AID_BANDED)) {
+			/* HAP_d1.0r00; 3.7 BAP Unicast Server role requirements
+			 * A Banded Hearing Aid in the HA role shall set the
+			 * Front Left and the Front Right bits to a value of 0b1
+			 * in the Sink Audio Locations characteristic value.
+			 */
+			bt_pacs_set_location(BT_AUDIO_DIR_SINK,
+					     (BT_AUDIO_LOCATION_FRONT_LEFT |
+					      BT_AUDIO_LOCATION_FRONT_RIGHT));
+		} else if (IS_ENABLED(CONFIG_HAP_HA_HEARING_AID_LEFT)) {
+			bt_pacs_set_location(BT_AUDIO_DIR_SINK,
+					     BT_AUDIO_LOCATION_FRONT_LEFT);
+		} else {
+			bt_pacs_set_location(BT_AUDIO_DIR_SINK,
+					     BT_AUDIO_LOCATION_FRONT_RIGHT);
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_ASCS_ASE_SRC)) {
+		bt_pacs_cap_register(BT_AUDIO_DIR_SOURCE, &cap_source);
 	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(streams); i++) {

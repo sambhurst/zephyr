@@ -26,8 +26,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <string.h>
 
 #include <zephyr/init.h>
-#include <zephyr/net/http_parser_url.h>
+#include <zephyr/net/http/parser_url.h>
 #include <zephyr/net/lwm2m.h>
+#include <zephyr/net/lwm2m_path.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/printk.h>
@@ -48,6 +49,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "lwm2m_rw_oma_tlv.h"
 #include "lwm2m_rw_plain_text.h"
 #include "lwm2m_util.h"
+#include "lwm2m_rd_client.h"
 #if defined(CONFIG_LWM2M_RW_SENML_JSON_SUPPORT)
 #include "lwm2m_rw_senml_json.h"
 #endif
@@ -60,9 +62,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #ifdef CONFIG_LWM2M_RW_SENML_CBOR_SUPPORT
 #include "lwm2m_rw_senml_cbor.h"
 #endif
-#ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
-#include "lwm2m_rd_client.h"
-#endif
+
 /* TODO: figure out what's correct value */
 #define TIMEOUT_BLOCKWISE_TRANSFER_MS (MSEC_PER_SEC * 30)
 
@@ -314,6 +314,9 @@ void lwm2m_reset_message(struct lwm2m_message *msg, bool release)
 	} else {
 		msg->message_timeout_cb = NULL;
 		(void)memset(&msg->cpkt, 0, sizeof(msg->cpkt));
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+		msg->cache_info = NULL;
+#endif
 	}
 }
 
@@ -337,6 +340,9 @@ int lwm2m_init_message(struct lwm2m_message *msg)
 	}
 
 	lm2m_message_clear_allocations(msg);
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	msg->cache_info = NULL;
+#endif
 
 	r = coap_packet_init(&msg->cpkt, msg->msg_data, sizeof(msg->msg_data), COAP_VERSION_1,
 			     msg->type, tokenlen, token, msg->code, msg->mid);
@@ -391,7 +397,7 @@ cleanup:
 
 int lwm2m_send_message_async(struct lwm2m_message *msg)
 {
-#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED) && defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT)
+#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
 	int ret;
 
 	ret = lwm2m_rd_client_connection_resume(msg->ctx);
@@ -402,8 +408,7 @@ int lwm2m_send_message_async(struct lwm2m_message *msg)
 #endif
 	sys_slist_append(&msg->ctx->pending_sends, &msg->node);
 
-	if (IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_SUPPORT) &&
-	    IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
+	if (IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
 		engine_update_tx_time();
 	}
 	return 0;
@@ -411,7 +416,7 @@ int lwm2m_send_message_async(struct lwm2m_message *msg)
 
 int lwm2m_information_interface_send(struct lwm2m_message *msg)
 {
-#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED) && defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT)
+#if defined(CONFIG_LWM2M_QUEUE_MODE_ENABLED)
 	int ret;
 
 	ret = lwm2m_rd_client_connection_resume(msg->ctx);
@@ -425,45 +430,10 @@ int lwm2m_information_interface_send(struct lwm2m_message *msg)
 		return 0;
 	}
 #endif
-	sys_slist_append(&msg->ctx->pending_sends, &msg->node);
 
-	if (IS_ENABLED(CONFIG_LWM2M_RD_CLIENT_SUPPORT) &&
-	    IS_ENABLED(CONFIG_LWM2M_QUEUE_MODE_ENABLED)) {
-		engine_update_tx_time();
-	}
-	return 0;
+	return lwm2m_send_message_async(msg);
 }
 
-int lwm2m_send_message(struct lwm2m_message *msg)
-{
-	int rc;
-
-	if (!msg || !msg->ctx) {
-		LOG_ERR("LwM2M message is invalid.");
-		return -EINVAL;
-	}
-
-	if (msg->type == COAP_TYPE_CON) {
-		coap_pending_cycle(msg->pending);
-	}
-
-	rc = send(msg->ctx->sock_fd, msg->cpkt.data, msg->cpkt.offset, 0);
-
-	if (rc < 0) {
-		LOG_ERR("Failed to send packet, err %d", errno);
-		if (msg->type != COAP_TYPE_CON) {
-			lwm2m_reset_message(msg, true);
-		}
-
-		return -errno;
-	}
-
-	if (msg->type != COAP_TYPE_CON) {
-		lwm2m_reset_message(msg, true);
-	}
-
-	return 0;
-}
 int lwm2m_send_empty_ack(struct lwm2m_ctx *client_ctx, uint16_t mid)
 {
 	struct lwm2m_message *msg;
@@ -537,12 +507,7 @@ int lwm2m_register_payload_handler(struct lwm2m_message *msg)
 		 * needed to report object version.
 		 */
 		if (obj->instance_count == 0U || lwm2m_engine_shall_report_obj_version(obj)) {
-			struct lwm2m_obj_path path = {
-				.obj_id = obj->obj_id,
-				.level = LWM2M_PATH_LEVEL_OBJECT,
-			};
-
-			ret = engine_put_corelink(&msg->out, &path);
+			ret = engine_put_corelink(&msg->out, &LWM2M_OBJ(obj->obj_id));
 			if (ret < 0) {
 				return ret;
 			}
@@ -554,13 +519,9 @@ int lwm2m_register_payload_handler(struct lwm2m_message *msg)
 
 		SYS_SLIST_FOR_EACH_CONTAINER(engine_obj_inst_list, obj_inst, node) {
 			if (obj_inst->obj->obj_id == obj->obj_id) {
-				struct lwm2m_obj_path path = {
-					.obj_id = obj_inst->obj->obj_id,
-					.obj_inst_id = obj_inst->obj_inst_id,
-					.level = LWM2M_PATH_LEVEL_OBJECT_INST,
-				};
-
-				ret = engine_put_corelink(&msg->out, &path);
+				ret = engine_put_corelink(
+					&msg->out,
+					&LWM2M_OBJ(obj_inst->obj->obj_id, obj_inst->obj_inst_id));
 				if (ret < 0) {
 					return ret;
 				}
@@ -757,6 +718,7 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst, struct lwm2m_eng
 	size_t total_size = 0;
 	int64_t temp64 = 0;
 	int32_t temp32 = 0;
+	time_t temp_time = 0;
 	int ret = 0;
 	bool last_block = true;
 	void *write_buf;
@@ -829,12 +791,22 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst, struct lwm2m_eng
 			break;
 
 		case LWM2M_RES_TYPE_TIME:
-			ret = engine_get_time(&msg->in, &temp64);
+			ret = engine_get_time(&msg->in, &temp_time);
 			if (ret < 0) {
 				break;
 			}
-			*(uint32_t *)write_buf = temp64;
-			len = 4;
+
+			if (write_buf_len == sizeof(time_t)) {
+				*(time_t *)write_buf = temp_time;
+				len = sizeof(time_t);
+			} else if (write_buf_len == sizeof(uint32_t)) {
+				*(uint32_t *)write_buf = (uint32_t)temp_time;
+				len = sizeof(uint32_t);
+			} else {
+				LOG_ERR("Time resource buf len not supported %zu", write_buf_len);
+				ret = -EINVAL;
+			}
+
 			break;
 
 		case LWM2M_RES_TYPE_U32:
@@ -965,18 +937,208 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst, struct lwm2m_eng
 	return ret;
 }
 
+static int lwm2m_read_resource_data(struct lwm2m_message *msg, void *data_ptr, size_t data_len,
+			       uint8_t data_type)
+{
+	int ret;
+
+	switch (data_type) {
+
+	case LWM2M_RES_TYPE_OPAQUE:
+		ret = engine_put_opaque(&msg->out, &msg->path, (uint8_t *)data_ptr, data_len);
+		break;
+
+	case LWM2M_RES_TYPE_STRING:
+		ret = engine_put_string(&msg->out, &msg->path, (uint8_t *)data_ptr,
+					strlen((uint8_t *)data_ptr));
+		break;
+
+	case LWM2M_RES_TYPE_U32:
+		ret = engine_put_s64(&msg->out, &msg->path, (int64_t) *(uint32_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_U16:
+		ret = engine_put_s32(&msg->out, &msg->path, (int32_t) *(uint16_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_U8:
+		ret = engine_put_s16(&msg->out, &msg->path, (int16_t) *(uint8_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_S64:
+		ret = engine_put_s64(&msg->out, &msg->path, *(int64_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_S32:
+		ret = engine_put_s32(&msg->out, &msg->path, *(int32_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_S16:
+		ret = engine_put_s16(&msg->out, &msg->path, *(int16_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_S8:
+		ret = engine_put_s8(&msg->out, &msg->path, *(int8_t *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_TIME:
+		if (data_len == sizeof(time_t)) {
+			ret = engine_put_time(&msg->out, &msg->path, *(time_t *)data_ptr);
+		} else if (data_len == sizeof(uint32_t)) {
+			ret = engine_put_time(&msg->out, &msg->path,
+					      (time_t) *((uint32_t *)data_ptr));
+		} else {
+			LOG_ERR("Resource time length not supported %zu", data_len);
+			ret = -EINVAL;
+		}
+
+		break;
+
+	case LWM2M_RES_TYPE_BOOL:
+		ret = engine_put_bool(&msg->out, &msg->path, *(bool *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_FLOAT:
+		ret = engine_put_float(&msg->out, &msg->path, (double *)data_ptr);
+		break;
+
+	case LWM2M_RES_TYPE_OBJLNK:
+		ret = engine_put_objlnk(&msg->out, &msg->path, (struct lwm2m_objlnk *)data_ptr);
+		break;
+
+	default:
+		LOG_ERR("unknown obj data_type %d", data_type);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static int lwm2m_read_cached_data(struct lwm2m_message *msg,
+				  struct lwm2m_time_series_resource *cached_data, uint8_t data_type)
+{
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	int ret;
+	struct lwm2m_time_series_elem buf;
+	struct lwm2m_cache_read_entry *read_info;
+	size_t  length = lwm2m_cache_size(cached_data);
+
+	LOG_DBG("Read cached data size %u", length);
+
+	if (msg->cache_info) {
+		read_info = &msg->cache_info->read_info[msg->cache_info->entry_size];
+		/* Store original timeseries ring buffer get states for failure handling */
+		read_info->cache_data = cached_data;
+		read_info->original_get_base = cached_data->rb.get_base;
+		read_info->original_get_head = cached_data->rb.get_head;
+		read_info->original_get_tail = cached_data->rb.get_tail;
+		msg->cache_info->entry_size++;
+		if (msg->cache_info->entry_limit) {
+			length = MIN(length, msg->cache_info->entry_limit);
+			LOG_DBG("Limited number of read %d", length);
+		}
+	}
+
+	for (size_t i = 0; i < length; i++) {
+
+		if (!lwm2m_cache_read(cached_data, &buf)) {
+			LOG_ERR("Read operation fail");
+			return -ENOMEM;
+		}
+
+		ret = engine_put_timestamp(&msg->out, buf.t);
+		if (ret) {
+			return ret;
+		}
+
+		switch (data_type) {
+
+		case LWM2M_RES_TYPE_U32:
+			ret = engine_put_s64(&msg->out, &msg->path, (int64_t)buf.u32);
+			break;
+
+		case LWM2M_RES_TYPE_U16:
+			ret = engine_put_s32(&msg->out, &msg->path, (int32_t)buf.u16);
+			break;
+
+		case LWM2M_RES_TYPE_U8:
+			ret = engine_put_s16(&msg->out, &msg->path, (int16_t)buf.u8);
+			break;
+
+		case LWM2M_RES_TYPE_S64:
+			ret = engine_put_s64(&msg->out, &msg->path, buf.i64);
+			break;
+
+		case LWM2M_RES_TYPE_S32:
+			ret = engine_put_s32(&msg->out, &msg->path, buf.i32);
+			break;
+
+		case LWM2M_RES_TYPE_S16:
+			ret = engine_put_s16(&msg->out, &msg->path, buf.i16);
+			break;
+
+		case LWM2M_RES_TYPE_S8:
+			ret = engine_put_s8(&msg->out, &msg->path, buf.i8);
+			break;
+
+		case LWM2M_RES_TYPE_BOOL:
+			ret = engine_put_bool(&msg->out, &msg->path, buf.b);
+			break;
+
+		case LWM2M_RES_TYPE_TIME:
+			ret = engine_put_time(&msg->out, &msg->path, buf.time);
+			break;
+
+		default:
+			ret = engine_put_float(&msg->out, &msg->path, &buf.f);
+			break;
+
+		}
+
+		/* Validate that we really read some data */
+		if (ret < 0) {
+			LOG_ERR("Read operation fail");
+			return -ENOMEM;
+		}
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
+static bool lwm2m_accept_timeseries_read(struct lwm2m_message *msg,
+					 struct lwm2m_time_series_resource *cached_data)
+{
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	if (cached_data && msg->cache_info && lwm2m_cache_size(cached_data) &&
+	    msg->out.writer->put_data_timestamp) {
+		return true;
+	}
+#endif
+	return false;
+}
+
 static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst, struct lwm2m_engine_res *res,
 			      struct lwm2m_engine_obj_field *obj_field, struct lwm2m_message *msg)
 {
 	int i, loop_max = 1, found_values = 0;
 	uint16_t res_inst_id_tmp = 0U;
 	void *data_ptr = NULL;
+	struct lwm2m_time_series_resource *cached_data = NULL;
 	size_t data_len = 0;
+	struct lwm2m_obj_path temp_path;
 	int ret = 0;
 
 	if (!obj_inst || !res || !obj_field || !msg) {
 		return -EINVAL;
 	}
+	temp_path.obj_id = obj_inst->obj->obj_id;
+
+	temp_path.obj_inst_id = obj_inst->obj_inst_id;
+	temp_path.res_id = obj_field->res_id;
+	temp_path.level = LWM2M_PATH_LEVEL_RESOURCE;
 
 	loop_max = res->res_inst_count;
 	if (res->multi_res_inst) {
@@ -1014,97 +1176,46 @@ static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst, struct lwm
 		if (res->res_inst_count > 1) {
 			msg->path.res_inst_id = res->res_instances[i].res_inst_id;
 		}
-
-		/* setup initial data elements */
-		data_ptr = res->res_instances[i].data_ptr;
-		data_len = res->res_instances[i].data_len;
-
-		/* allow user to override data elements via callback */
-		if (res->read_cb) {
-			data_ptr = res->read_cb(obj_inst->obj_inst_id, res->res_id,
-						res->res_instances[i].res_inst_id, &data_len);
+		if (res->multi_res_inst) {
+			temp_path.res_inst_id = res->res_instances[i].res_inst_id;
+			temp_path.level = LWM2M_PATH_LEVEL_RESOURCE_INST;
 		}
 
-		if (!data_ptr && data_len) {
-			return -ENOENT;
-		}
+		cached_data = lwm2m_cache_entry_get_by_object(&temp_path);
 
-		if (!data_len) {
-			if (obj_field->data_type != LWM2M_RES_TYPE_OPAQUE &&
-			    obj_field->data_type != LWM2M_RES_TYPE_STRING) {
+		if (lwm2m_accept_timeseries_read(msg, cached_data)) {
+			/* Content Format Writer have to support timestamp write */
+			ret = lwm2m_read_cached_data(msg, cached_data, obj_field->data_type);
+		} else {
+			/* setup initial data elements */
+			data_ptr = res->res_instances[i].data_ptr;
+			data_len = res->res_instances[i].data_len;
+
+			/* allow user to override data elements via callback */
+			if (res->read_cb) {
+				data_ptr =
+					res->read_cb(obj_inst->obj_inst_id, res->res_id,
+						     res->res_instances[i].res_inst_id, &data_len);
+			}
+
+			if (!data_ptr && data_len) {
 				return -ENOENT;
 			}
-			/* Only opaque and string types can be empty, and when
-			 * empty, we should not give pointer to potentially uninitialized
-			 * data to a content formatter. Give pointer to empty string instead.
-			 */
-			data_ptr = "";
-		}
 
-		switch (obj_field->data_type) {
-
-		case LWM2M_RES_TYPE_OPAQUE:
-			ret = engine_put_opaque(&msg->out, &msg->path, (uint8_t *)data_ptr,
-						data_len);
-			break;
-
-		case LWM2M_RES_TYPE_STRING:
-			ret = engine_put_string(&msg->out, &msg->path, (uint8_t *)data_ptr,
-						strlen((uint8_t *)data_ptr));
-			break;
-
-		case LWM2M_RES_TYPE_U32:
-			ret = engine_put_s64(&msg->out, &msg->path,
-					     (int64_t) *(uint32_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_U16:
-			ret = engine_put_s32(&msg->out, &msg->path,
-					     (int32_t) *(uint16_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_U8:
-			ret = engine_put_s16(&msg->out, &msg->path,
-					     (int16_t) *(uint8_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_S64:
-			ret = engine_put_s64(&msg->out, &msg->path, *(int64_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_S32:
-			ret = engine_put_s32(&msg->out, &msg->path, *(int32_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_S16:
-			ret = engine_put_s16(&msg->out, &msg->path, *(int16_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_S8:
-			ret = engine_put_s8(&msg->out, &msg->path, *(int8_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_TIME:
-			ret = engine_put_time(&msg->out, &msg->path,
-					      (int64_t) *(uint32_t *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_BOOL:
-			ret = engine_put_bool(&msg->out, &msg->path, *(bool *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_FLOAT:
-			ret = engine_put_float(&msg->out, &msg->path, (double *)data_ptr);
-			break;
-
-		case LWM2M_RES_TYPE_OBJLNK:
-			ret = engine_put_objlnk(&msg->out, &msg->path,
-						(struct lwm2m_objlnk *)data_ptr);
-			break;
-
-		default:
-			LOG_ERR("unknown obj data_type %d", obj_field->data_type);
-			return -EINVAL;
+			if (!data_len) {
+				if (obj_field->data_type != LWM2M_RES_TYPE_OPAQUE &&
+				    obj_field->data_type != LWM2M_RES_TYPE_STRING) {
+					return -ENOENT;
+				}
+				/* Only opaque and string types can be empty, and when
+				 * empty, we should not give pointer to potentially uninitialized
+				 * data to a content formatter. Give pointer to empty string
+				 * instead.
+				 */
+				data_ptr = "";
+			}
+			ret = lwm2m_read_resource_data(msg, data_ptr, data_len,
+						       obj_field->data_type);
 		}
 
 		/* Validate that we really read some data */
@@ -1147,11 +1258,9 @@ static int lwm2m_delete_handler(struct lwm2m_message *msg)
 		return ret;
 	}
 
-#if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT)
 	if (!msg->ctx->bootstrap_mode) {
 		engine_trigger_update(true);
 	}
-#endif
 
 	return 0;
 }
@@ -1380,14 +1489,9 @@ static int lwm2m_discover_add_res(struct lwm2m_message *msg, struct lwm2m_engine
 				  struct lwm2m_engine_res *res)
 {
 	int ret;
-	struct lwm2m_obj_path path = {
-		.obj_id = obj_inst->obj->obj_id,
-		.obj_inst_id = obj_inst->obj_inst_id,
-		.res_id = res->res_id,
-		.level = LWM2M_PATH_LEVEL_RESOURCE,
-	};
 
-	ret = engine_put_corelink(&msg->out, &path);
+	ret = engine_put_corelink(
+		&msg->out, &LWM2M_OBJ(obj_inst->obj->obj_id, obj_inst->obj_inst_id, res->res_id));
 	if (ret < 0) {
 		return ret;
 	}
@@ -1402,15 +1506,9 @@ static int lwm2m_discover_add_res(struct lwm2m_message *msg, struct lwm2m_engine
 				continue;
 			}
 
-			path = (struct lwm2m_obj_path){
-				.obj_id = obj_inst->obj->obj_id,
-				.obj_inst_id = obj_inst->obj_inst_id,
-				.res_id = res->res_id,
-				.res_inst_id = res_inst->res_inst_id,
-				.level = LWM2M_PATH_LEVEL_RESOURCE_INST,
-			};
-
-			ret = engine_put_corelink(&msg->out, &path);
+			ret = engine_put_corelink(
+				&msg->out, &LWM2M_OBJ(obj_inst->obj->obj_id, obj_inst->obj_inst_id,
+						      res->res_id, res_inst->res_inst_id));
 			if (ret < 0) {
 				return ret;
 			}
@@ -1477,12 +1575,7 @@ int lwm2m_discover_handler(struct lwm2m_message *msg, bool is_bootstrap)
 		if ((is_bootstrap &&
 		     (obj->instance_count == 0U || lwm2m_engine_shall_report_obj_version(obj))) ||
 		    (!is_bootstrap && msg->path.level == LWM2M_PATH_LEVEL_OBJECT)) {
-			struct lwm2m_obj_path path = {
-				.obj_id = obj->obj_id,
-				.level = LWM2M_PATH_LEVEL_OBJECT,
-			};
-
-			ret = engine_put_corelink(&msg->out, &path);
+			ret = engine_put_corelink(&msg->out, &LWM2M_OBJ(obj->obj_id));
 			if (ret < 0) {
 				return ret;
 			}
@@ -1509,13 +1602,9 @@ int lwm2m_discover_handler(struct lwm2m_message *msg, bool is_bootstrap)
 			 * provided.
 			 */
 			if (msg->path.level <= LWM2M_PATH_LEVEL_OBJECT_INST) {
-				struct lwm2m_obj_path path = {
-					.obj_id = obj_inst->obj->obj_id,
-					.obj_inst_id = obj_inst->obj_inst_id,
-					.level = LWM2M_PATH_LEVEL_OBJECT_INST,
-				};
-
-				ret = engine_put_corelink(&msg->out, &path);
+				ret = engine_put_corelink(
+					&msg->out,
+					&LWM2M_OBJ(obj_inst->obj->obj_id, obj_inst->obj_inst_id));
 				if (ret < 0) {
 					return ret;
 				}
@@ -2310,6 +2399,24 @@ static struct lwm2m_obj_path *lwm2m_read_first_path_ptr(sys_slist_t *lwm2m_path_
 	return &entry->path;
 }
 
+static void notify_cached_pending_data_trig(struct observe_node *obs)
+{
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	struct lwm2m_time_series_resource *cached_data;
+	struct lwm2m_obj_path_list *entry;
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&obs->path_list, entry, node) {
+		cached_data = lwm2m_cache_entry_get_by_object(&entry->path);
+		if (!cached_data || lwm2m_cache_size(cached_data) == 0) {
+			continue;
+		}
+
+		/* Trig next send by iMin */
+		lwm2m_notify_observer_path(&entry->path);
+	}
+#endif
+}
+
 static int notify_message_reply_cb(const struct coap_packet *response, struct coap_reply *reply,
 				   const struct sockaddr *from)
 {
@@ -2349,6 +2456,7 @@ static int notify_message_reply_cb(const struct coap_packet *response, struct co
 						     lwm2m_read_first_path_ptr(&obs->path_list),
 						     reply->user_data);
 			}
+			notify_cached_pending_data_trig(obs);
 		}
 	}
 
@@ -2375,18 +2483,68 @@ static int do_send_op(struct lwm2m_message *msg, uint16_t content_format,
 	}
 }
 
+static bool lwm2m_timeseries_data_rebuild(struct lwm2m_message *msg, int error_code)
+{
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	struct lwm2m_cache_read_info *cache_temp;
+
+	if (error_code != -ENOMEM) {
+		return false;
+	}
+
+	cache_temp = msg->cache_info;
+
+	if (!cache_temp || !cache_temp->entry_size) {
+		return false;
+	}
+
+	/* Put Ring buffer back to original */
+	for (int i = 0; i < cache_temp->entry_size; i++) {
+		cache_temp->read_info[i].cache_data->rb.get_head =
+			cache_temp->read_info[i].original_get_head;
+		cache_temp->read_info[i].cache_data->rb.get_tail =
+			cache_temp->read_info[i].original_get_tail;
+		cache_temp->read_info[i].cache_data->rb.get_base =
+			cache_temp->read_info[i].original_get_base;
+	}
+
+	if (cache_temp->entry_limit) {
+		/* Limited number of message build fail also */
+		return false;
+	}
+
+	/* Limit re-build entry count */
+	cache_temp->entry_limit = LWM2M_LIMITED_TIMESERIES_RESOURCE_COUNT / cache_temp->entry_size;
+	cache_temp->entry_size = 0;
+
+	lwm2m_reset_message(msg, false);
+	LOG_INF("Try re-buildbuild again with limited cache size %d", cache_temp->entry_limit);
+	return true;
+#else
+	return false;
+#endif
+}
+
 int generate_notify_message(struct lwm2m_ctx *ctx, struct observe_node *obs, void *user_data)
 {
 	struct lwm2m_message *msg;
 	struct lwm2m_engine_obj_inst *obj_inst;
 	struct lwm2m_obj_path *path;
 	int ret = 0;
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	struct lwm2m_cache_read_info cache_temp_info;
+
+	cache_temp_info.entry_size = 0;
+	cache_temp_info.entry_limit = 0;
+#endif
 
 	msg = lwm2m_get_message(ctx);
 	if (!msg) {
 		LOG_ERR("Unable to get a lwm2m message!");
 		return -ENOMEM;
 	}
+msg_init:
+
 	if (!obs->composite) {
 		path = lwm2m_read_first_path_ptr(&obs->path_list);
 		if (!path) {
@@ -2430,6 +2588,9 @@ int generate_notify_message(struct lwm2m_ctx *ctx, struct observe_node *obs, voi
 		LOG_ERR("Unable to init lwm2m message! (err: %d)", ret);
 		goto cleanup;
 	}
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	msg->cache_info = &cache_temp_info;
+#endif
 
 	/* lwm2m_init_message() cleans the coap reply fields, so we assign our data here */
 	msg->reply->user_data = user_data;
@@ -2452,6 +2613,12 @@ int generate_notify_message(struct lwm2m_ctx *ctx, struct observe_node *obs, voi
 	}
 
 	if (ret < 0) {
+		if (lwm2m_timeseries_data_rebuild(msg, ret)) {
+			/* Message Build fail by ENOMEM and data include timeseries data.
+			 * Try rebuild message again by limiting timeseries data entry lenghts.
+			 */
+			goto msg_init;
+		}
 		LOG_ERR("error in multi-format read (err:%d)", ret);
 		goto cleanup;
 	}
@@ -2459,6 +2626,9 @@ int generate_notify_message(struct lwm2m_ctx *ctx, struct observe_node *obs, voi
 	obs->active_tx_operation = true;
 	obs->resource_update = false;
 	lwm2m_information_interface_send(msg);
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	msg->cache_info = NULL;
+#endif
 
 	LOG_DBG("NOTIFY MSG: SENT");
 	return 0;
@@ -2568,7 +2738,7 @@ int lwm2m_parse_peerinfo(char *url, struct lwm2m_ctx *client_ctx, bool is_firmwa
 {
 	struct http_parser_url parser;
 #if defined(CONFIG_LWM2M_DNS_SUPPORT)
-	struct addrinfo *res, hints = {0};
+	struct zsock_addrinfo *res, hints = {0};
 #endif
 	int ret;
 	uint16_t off, len;
@@ -2653,7 +2823,7 @@ int lwm2m_parse_peerinfo(char *url, struct lwm2m_ctx *client_ctx, bool is_firmwa
 		hints.ai_family = AF_UNSPEC;
 #endif /* defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV4) */
 		hints.ai_socktype = SOCK_DGRAM;
-		ret = getaddrinfo(url + off, NULL, &hints, &res);
+		ret = zsock_getaddrinfo(url + off, NULL, &hints, &res);
 		if (ret != 0) {
 			LOG_ERR("Unable to resolve address");
 			/* DNS error codes don't align with normal errors */
@@ -2663,7 +2833,7 @@ int lwm2m_parse_peerinfo(char *url, struct lwm2m_ctx *client_ctx, bool is_firmwa
 
 		memcpy(&client_ctx->remote_addr, res->ai_addr, sizeof(client_ctx->remote_addr));
 		client_ctx->remote_addr.sa_family = res->ai_family;
-		freeaddrinfo(res);
+		zsock_freeaddrinfo(res);
 #else
 		goto cleanup;
 #endif /* CONFIG_LWM2M_DNS_SUPPORT */
@@ -2733,8 +2903,42 @@ static void do_send_timeout_cb(struct lwm2m_message *msg)
 }
 #endif
 
-int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t path_list_size,
-		      bool confirmation_request)
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+static bool init_next_pending_timeseries_data(struct lwm2m_cache_read_info *cache_temp,
+					  sys_slist_t *lwm2m_path_list,
+					  sys_slist_t *lwm2m_path_free_list)
+{
+	uint32_t bytes_available = 0;
+
+	/* Check do we have still pending data to send */
+	for (int i = 0; i < cache_temp->entry_size; i++) {
+		if (ring_buf_is_empty(&cache_temp->read_info[i].cache_data->rb)) {
+			/* Skip Emtpy cached buffers */
+			continue;
+		}
+
+		/* Add to linked list */
+		if (lwm2m_engine_add_path_to_list(lwm2m_path_list, lwm2m_path_free_list,
+						  &cache_temp->read_info[i].cache_data->path)) {
+			return false;
+		}
+
+		bytes_available += ring_buf_size_get(&cache_temp->read_info[i].cache_data->rb);
+	}
+
+	if (bytes_available == 0) {
+		return false;
+	}
+
+	LOG_INF("Allocate a new message for pending data %u", bytes_available);
+	cache_temp->entry_size = 0;
+	cache_temp->entry_limit = 0;
+	return true;
+}
+#endif
+
+int lwm2m_send(struct lwm2m_ctx *ctx, const struct lwm2m_obj_path path_list[],
+	       uint8_t path_list_size, bool confirmation_request)
 {
 #if defined(CONFIG_LWM2M_SERVER_OBJECT_VERSION_1_1)
 	struct lwm2m_message *msg;
@@ -2742,10 +2946,15 @@ int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t pa
 	uint16_t content_format;
 
 	/* Path list buffer */
-	struct lwm2m_obj_path temp;
 	struct lwm2m_obj_path_list lwm2m_path_list_buf[CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE];
 	sys_slist_t lwm2m_path_list;
 	sys_slist_t lwm2m_path_free_list;
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	struct lwm2m_cache_read_info cache_temp_info;
+
+	cache_temp_info.entry_size = 0;
+	cache_temp_info.entry_limit = 0;
+#endif
 
 	/* Validate Connection */
 	if (!lwm2m_rd_client_is_registred(ctx)) {
@@ -2776,24 +2985,27 @@ int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t pa
 
 	/* Parse Path to internal used object path format */
 	for (int i = 0; i < path_list_size; i++) {
-		ret = lwm2m_string_to_path(path_list[i], &temp, '/');
-		if (ret < 0) {
-			return ret;
-		}
 		/* Add to linked list */
-		if (lwm2m_engine_add_path_to_list(&lwm2m_path_list, &lwm2m_path_free_list, &temp)) {
+		if (lwm2m_engine_add_path_to_list(&lwm2m_path_list, &lwm2m_path_free_list,
+						  &path_list[i])) {
 			return -1;
 		}
 	}
 	/* Clear path which are part are part of recursive path /1 will include /1/0/1 */
 	lwm2m_engine_clear_duplicate_path(&lwm2m_path_list, &lwm2m_path_free_list);
-
+	lwm2m_registry_lock();
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+msg_alloc:
+#endif
 	/* Allocate Message buffer */
 	msg = lwm2m_get_message(ctx);
 	if (!msg) {
+		lwm2m_registry_unlock();
 		LOG_ERR("Unable to get a lwm2m message!");
 		return -ENOMEM;
 	}
+
+msg_init:
 
 	if (confirmation_request) {
 		msg->type = COAP_TYPE_CON;
@@ -2813,6 +3025,10 @@ int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t pa
 	if (ret) {
 		goto cleanup;
 	}
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	msg->cache_info = &cache_temp_info;
+#endif
+
 	ret = select_writer(&msg->out, content_format);
 	if (ret) {
 		goto cleanup;
@@ -2827,18 +3043,64 @@ int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t pa
 	/* Write requested path data */
 	ret = do_send_op(msg, content_format, &lwm2m_path_list);
 	if (ret < 0) {
+		if (lwm2m_timeseries_data_rebuild(msg, ret)) {
+			/* Message Build fail by ENOMEM and data include timeseries data.
+			 * Try rebuild message again by limiting timeseries data entry lenghts.
+			 */
+			goto msg_init;
+		}
+
 		LOG_ERR("Send (err:%d)", ret);
 		goto cleanup;
 	}
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	msg->cache_info = NULL;
+#endif
 	LOG_INF("Send op to server (/dp)");
 	lwm2m_information_interface_send(msg);
 
+#if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
+	if (cache_temp_info.entry_size) {
+		/* Init Path list for continuous message allocation */
+		lwm2m_engine_path_list_init(&lwm2m_path_list, &lwm2m_path_free_list,
+					    lwm2m_path_list_buf,
+					    CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE);
+
+		if (init_next_pending_timeseries_data(&cache_temp_info, &lwm2m_path_list,
+						     &lwm2m_path_free_list)) {
+			goto msg_alloc;
+		}
+	}
+#endif
+	lwm2m_registry_unlock();
 	return 0;
 cleanup:
+	lwm2m_registry_unlock();
 	lwm2m_reset_message(msg, true);
 	return ret;
 #else
 	LOG_WRN("LwM2M send is only supported for CONFIG_LWM2M_SERVER_OBJECT_VERSION_1_1");
 	return -ENOTSUP;
 #endif
+}
+
+int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t path_list_size,
+		      bool confirmation_request)
+{
+	int ret;
+	struct lwm2m_obj_path lwm2m_path_list[CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE];
+
+	if (path_list_size > CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE) {
+		return -E2BIG;
+	}
+
+	for (int i = 0; i < path_list_size; i++) {
+		/* translate path -> path_obj */
+		ret = lwm2m_string_to_path(path_list[i], &lwm2m_path_list[i], '/');
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	return lwm2m_send(ctx, lwm2m_path_list, path_list_size, confirmation_request);
 }

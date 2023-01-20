@@ -1,6 +1,7 @@
 # originates from common-rom.ld
 
 zephyr_linker_section(NAME init KVMA RAM_REGION GROUP RODATA_REGION)
+zephyr_linker_section_obj_level(SECTION init LEVEL EARLY)
 zephyr_linker_section_obj_level(SECTION init LEVEL PRE_KERNEL_1)
 zephyr_linker_section_obj_level(SECTION init LEVEL PRE_KERNEL_2)
 zephyr_linker_section_obj_level(SECTION init LEVEL POST_KERNEL)
@@ -8,6 +9,7 @@ zephyr_linker_section_obj_level(SECTION init LEVEL APPLICATION)
 zephyr_linker_section_obj_level(SECTION init LEVEL SMP)
 
 zephyr_linker_section(NAME device KVMA RAM_REGION GROUP RODATA_REGION)
+zephyr_linker_section_obj_level(SECTION device LEVEL EARLY)
 zephyr_linker_section_obj_level(SECTION device LEVEL PRE_KERNEL_1)
 zephyr_linker_section_obj_level(SECTION device LEVEL PRE_KERNEL_2)
 zephyr_linker_section_obj_level(SECTION device LEVEL POST_KERNEL)
@@ -29,7 +31,7 @@ zephyr_linker_section_configure(SECTION initlevel_error INPUT ".z_init_[_A-Z0-9]
 # ASSERT(SIZEOF(initlevel_error) == 0, "Undefined initialization levels used.")
 
 
-if(CONFIG_CPLUSPLUS)
+if(CONFIG_CPP)
   zephyr_linker_section(NAME ctors KVMA RAM_REGION GROUP RODATA_REGION NOINPUT)
   #
   # The compiler fills the constructor pointers table below,
@@ -138,6 +140,14 @@ endif()
 
 if(CONFIG_SETTINGS)
   zephyr_iterable_section(NAME settings_handler_static KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+endif()
+
+if(CONFIG_SENSOR_INFO)
+  zephyr_iterable_section(NAME sensor_info KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
+endif()
+
+if(CONFIG_MCUMGR)
+  zephyr_iterable_section(NAME mcumgr_handler KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)
 endif()
 
 zephyr_iterable_section(NAME k_p4wq_initparam KVMA RAM_REGION GROUP RODATA_REGION SUBALIGN 4)

@@ -16,3 +16,5 @@ supported:
   - i2c
   - pwm
   - watchdog
+  - netif:modem
+  - gpio

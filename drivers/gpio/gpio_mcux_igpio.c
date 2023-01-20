@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/irq.h>
 #include <soc.h>
 #include <fsl_common.h>
 #include <fsl_gpio.h>
@@ -17,7 +18,7 @@
 #include <zephyr/drivers/pinctrl.h>
 #endif
 
-#include "gpio_utils.h"
+#include <zephyr/drivers/gpio/gpio_utils.h>
 
 struct gpio_pin_gaps {
 	uint8_t start;
@@ -55,8 +56,8 @@ static int mcux_igpio_configure(const struct device *dev,
 
 	/* Some SOCs have non-contiguous gpio pin layouts, account for this */
 	for (i = 0; i < config->gap_count; i++) {
-		if (cfg_idx >= config->pin_gaps[i].start) {
-			if (cfg_idx < (config->pin_gaps[i].start +
+		if (pin >= config->pin_gaps[i].start) {
+			if (pin < (config->pin_gaps[i].start +
 				config->pin_gaps[i].len)) {
 				/* Pin is not connected to a mux */
 				return -ENOTSUP;

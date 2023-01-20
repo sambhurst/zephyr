@@ -9,9 +9,6 @@ config THINGY53_INIT_PRIORITY
 	help
 	  Initialization priority of the Thingy:53.
 
-config IPM_NRFX
-	default IPM
-
 config MBOX_NRFX_IPC
 	default MBOX
 
@@ -30,6 +27,10 @@ config BOARD_ENABLE_DCDC_NET
 config BOARD_ENABLE_DCDC_HV
 	bool "High Voltage DCDC converter"
 	select SOC_DCDC_NRF53X_HV
+	default y
+
+config BOARD_SERIAL_BACKEND_CDC_ACM
+	bool "USB CDC"
 	default y
 
 config BOARD_ENABLE_CPUNET

@@ -351,13 +351,6 @@
 #define DT_PARENT(node_id) UTIL_CAT(node_id, _PARENT)
 
 /**
- * @brief Get a `DT_DRV_COMPAT` parent's node identifier
- * @param inst instance number
- * @return a node identifier for the instance's parent
- */
-#define DT_INST_PARENT(inst) DT_PARENT(DT_DRV_INST(inst))
-
-/**
  * @brief Get a node identifier for a grandparent node
  *
  * Example devicetree fragment:
@@ -1864,7 +1857,7 @@
  */
 
 /**
- * @defgroup devicetree-generic-vendor Vendor name helpers
+ * @defgroup devicetree-generic-vendor Vendor and model name helpers
  * @ingroup devicetree
  * @{
  */
@@ -1950,6 +1943,82 @@
  */
 #define DT_NODE_VENDOR_OR(node_id, default_value) \
 	DT_NODE_VENDOR_BY_IDX_OR(node_id, 0, default_value)
+
+/**
+ * @brief Get the model at index "idx" as a string literal
+ *
+ * The model is a string extracted from the compatible after the vendor prefix.
+ *
+ * Example vendor-prefixes.txt:
+ *
+ *	vnd	A stand-in for a real vendor
+ *	zephyr	Zephyr-specific binding
+ *
+ * Example devicetree fragment:
+ *
+ *	n1: node-1 {
+ *		compatible = "vnd,model1", "gpio", "zephyr,model2";
+ *	};
+ *
+ * Example usage:
+ *
+ *	DT_NODE_MODEL_BY_IDX(DT_NODELABEL(n1), 0) // "model1"
+ *	DT_NODE_MODEL_BY_IDX(DT_NODELABEL(n1), 2) // "model2"
+ *
+ * Notice that the compatible at index 1 doesn't match any entries in the
+ * vendor prefix file and therefore index 1 is not a valid model index. Use
+ * DT_NODE_MODEL_HAS_IDX(node_id, idx) to determine if an index is valid.
+ *
+ * @param node_id node identifier
+ * @param idx index of the model to return
+ * @return string literal of the idx-th model
+ */
+#define DT_NODE_MODEL_BY_IDX(node_id, idx) \
+	DT_CAT3(node_id, _COMPAT_MODEL_IDX_, idx)
+
+/**
+ * @brief Does a node's compatible property have a model at an index?
+ *
+ * If this returns 1, then DT_NODE_MODEL_BY_IDX(node_id, idx) is valid. If it
+ * returns 0, it is an error to use DT_NODE_MODEL_BY_IDX(node_id, idx) with
+ * index "idx".
+ *
+ * @param node_id node identifier
+ * @param idx index of the model to check
+ * @return 1 if "idx" is a valid model index,
+ *         0 otherwise.
+ */
+#define DT_NODE_MODEL_HAS_IDX(node_id, idx) \
+	IS_ENABLED(DT_CAT4(node_id, _COMPAT_MODEL_IDX_, idx, _EXISTS))
+
+/**
+ * @brief Like DT_NODE_MODEL_BY_IDX(), but with a fallback to default_value.
+ *
+ * If the value exists, this expands to DT_NODE_MODEL_BY_IDX(node_id, idx).
+ * The default_value parameter is not expanded in this case.
+ *
+ * Otherwise, this expands to default_value.
+ *
+ * @param node_id node identifier
+ * @param idx index of the model to return
+ * @return string literal of the idx-th model
+ * @param default_value a fallback value to expand to
+ * @return string literal of the idx-th model or "default_value"
+ */
+#define DT_NODE_MODEL_BY_IDX_OR(node_id, idx, default_value) \
+	COND_CODE_1(DT_NODE_MODEL_HAS_IDX(node_id, idx), \
+		    (DT_NODE_MODEL_BY_IDX(node_id, idx)), (default_value))
+
+/**
+ * @brief Get the node's (only) model as a string literal
+ *
+ * Equivalent to DT_NODE_MODEL_BY_IDX_OR(node_id, 0, default_value).
+ *
+ * @param node_id node identifier
+ * @param default_value a fallback value to expand to
+ */
+#define DT_NODE_MODEL_OR(node_id, default_value) \
+	DT_NODE_MODEL_BY_IDX_OR(node_id, 0, default_value)
 
 /**
  * @}
@@ -2979,6 +3048,24 @@
 #define DT_DRV_INST(inst) DT_INST(inst, DT_DRV_COMPAT)
 
 /**
+ * @brief Get a `DT_DRV_COMPAT` parent's node identifier
+ * @param inst instance number
+ * @return a node identifier for the instance's parent
+ *
+ * @see DT_PARENT
+ */
+#define DT_INST_PARENT(inst) DT_PARENT(DT_DRV_INST(inst))
+
+/**
+ * @brief Get a `DT_DRV_COMPAT` grandparent's node identifier
+ * @param inst instance number
+ * @return a node identifier for the instance's grandparent
+ *
+ * @see DT_GPARENT
+ */
+#define DT_INST_GPARENT(inst) DT_GPARENT(DT_DRV_INST(inst))
+
+/**
  * @brief Get a node identifier for a child node of DT_DRV_INST(inst)
  *
  * @param inst instance number
@@ -3852,7 +3939,6 @@
 #include <zephyr/devicetree/dma.h>
 #include <zephyr/devicetree/pwms.h>
 #include <zephyr/devicetree/fixed-partitions.h>
-#include <zephyr/devicetree/zephyr.h>
 #include <zephyr/devicetree/ordinals.h>
 #include <zephyr/devicetree/pinctrl.h>
 #include <zephyr/devicetree/can.h>

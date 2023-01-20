@@ -1,6 +1,7 @@
 # vim: set syntax=python ts=4 :
 #
 # Copyright (c) 20180-2022 Intel Corporation
+# Copyright 2022 NXP
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -20,6 +21,8 @@ from multiprocessing.managers import BaseManager
 from twisterlib.cmakecache import CMakeCache
 from twisterlib.environment import canonical_zephyr_base
 from twisterlib.log_helper import log_command
+from domains import Domains
+from twisterlib.testinstance import TestInstance
 
 logger = logging.getLogger('twister')
 logger.setLevel(logging.DEBUG)
@@ -285,7 +288,6 @@ class CMake:
         logger.debug("Running cmake on %s for %s" % (self.source_dir, self.platform.name))
         cmake_args = [
             f'-B{self.build_dir}',
-            f'-S{self.source_dir}',
             f'-DTC_RUNID={self.instance.run_id}',
             f'-DEXTRA_CFLAGS={cflags}',
             f'-DEXTRA_AFLAGS={aflags}',
@@ -293,6 +295,18 @@ class CMake:
             f'-DEXTRA_GEN_DEFINES_ARGS={gen_defines_args}',
             f'-G{self.env.generator}'
         ]
+
+        if self.testsuite.sysbuild:
+            logger.debug("Building %s using sysbuild" % (self.source_dir))
+            source_args = [
+                f'-S{canonical_zephyr_base}/share/sysbuild',
+                f'-DAPP_DIR={self.source_dir}'
+            ]
+        else:
+            source_args = [
+                f'-S{self.source_dir}'
+            ]
+        cmake_args.extend(source_args)
 
         cmake_args.extend(args)
 
@@ -351,8 +365,20 @@ class FilterBuilder(CMake):
         if self.platform.name == "unit_testing":
             return {}
 
-        cmake_cache_path = os.path.join(self.build_dir, "CMakeCache.txt")
-        defconfig_path = os.path.join(self.build_dir, "zephyr", ".config")
+        if self.testsuite.sysbuild:
+            # Load domain yaml to get default domain build directory
+            domain_path = os.path.join(self.build_dir, "domains.yaml")
+            domains = Domains.from_file(domain_path)
+            logger.debug("Loaded sysbuild domain data from %s" % (domain_path))
+            domain_build = domains.get_default_domain().build_dir
+            cmake_cache_path = os.path.join(domain_build, "CMakeCache.txt")
+            defconfig_path = os.path.join(domain_build, "zephyr", ".config")
+            edt_pickle = os.path.join(domain_build, "zephyr", "edt.pickle")
+        else:
+            cmake_cache_path = os.path.join(self.build_dir, "CMakeCache.txt")
+            defconfig_path = os.path.join(self.build_dir, "zephyr", ".config")
+            edt_pickle = os.path.join(self.build_dir, "zephyr", "edt.pickle")
+
 
         with open(defconfig_path, "r") as fp:
             defconfig = {}
@@ -385,7 +411,21 @@ class FilterBuilder(CMake):
         filter_data.update(self.defconfig)
         filter_data.update(self.cmake_cache)
 
-        edt_pickle = os.path.join(self.build_dir, "zephyr", "edt.pickle")
+        if self.testsuite.sysbuild and self.env.options.device_testing:
+            # Verify that twister's arguments support sysbuild.
+            # Twister sysbuild flashing currently only works with west, so
+            # --west-flash must be passed. Additionally, erasing the DUT
+            # before each test with --west-flash=--erase will inherently not
+            # work with sysbuild.
+            if self.env.options.west_flash is None:
+                logger.warning("Sysbuild test will be skipped. " +
+                    "West must be used for flashing.")
+                return {os.path.join(self.platform.name, self.testsuite.name): True}
+            elif "--erase" in self.env.options.west_flash:
+                logger.warning("Sysbuild test will be skipped, " +
+                    "--erase is not supported with --west-flash")
+                return {os.path.join(self.platform.name, self.testsuite.name): True}
+
         if self.testsuite and self.testsuite.filter:
             try:
                 if os.path.exists(edt_pickle):
@@ -506,7 +546,7 @@ class ProjectBuilder(FilterBuilder):
 
         elif op == "gather_metrics":
             self.gather_metrics(self.instance)
-            if self.instance.run and self.instance.handler:
+            if self.instance.run and self.instance.handler.ready:
                 pipeline.put({"op": "run", "test": self.instance})
             else:
                 pipeline.put({"op": "report", "test": self.instance})
@@ -537,16 +577,19 @@ class ProjectBuilder(FilterBuilder):
                 done.put(self.instance)
                 self.report_out(results)
 
-            if self.options.runtime_artifact_cleanup and not self.options.coverage and self.instance.status == "passed":
-                pipeline.put({
-                    "op": "cleanup",
-                    "test": self.instance
-                })
+            if not self.options.coverage:
+                if self.options.prep_artifacts_for_testing:
+                    pipeline.put({"op": "cleanup", "mode": "device", "test": self.instance})
+                elif self.options.runtime_artifact_cleanup == "pass" and self.instance.status == "passed":
+                    pipeline.put({"op": "cleanup", "mode": "passed", "test": self.instance})
+                elif self.options.runtime_artifact_cleanup == "all":
+                    pipeline.put({"op": "cleanup", "mode": "all", "test": self.instance})
 
         elif op == "cleanup":
-            if self.options.device_testing or self.options.prep_artifacts_for_testing:
+            mode = message.get("mode")
+            if mode == "device":
                 self.cleanup_device_testing_artifacts()
-            else:
+            elif mode == "pass" or (mode == "all" and self.instance.reason != "Cmake build failure"):
                 self.cleanup_artifacts()
 
     def determine_testcases(self, results):
@@ -589,7 +632,7 @@ class ProjectBuilder(FilterBuilder):
     def cleanup_artifacts(self, additional_keep=[]):
         logger.debug("Cleaning up {}".format(self.instance.build_dir))
         allow = [
-            'zephyr/.config',
+            os.path.join('zephyr', '.config'),
             'handler.log',
             'build.log',
             'device.log',
@@ -598,10 +641,13 @@ class ProjectBuilder(FilterBuilder):
             'Makefile',
             'CMakeCache.txt',
             'build.ninja',
-            'CMakeFiles/rules.ninja'
+            os.path.join('CMakeFiles', 'rules.ninja')
             ]
 
         allow += additional_keep
+
+        if self.options.runtime_artifact_cleanup == 'all':
+            allow += [os.path.join('twister', 'testsuite_extra.conf')]
 
         allow = [os.path.join(self.instance.build_dir, file) for file in allow]
 
@@ -623,13 +669,19 @@ class ProjectBuilder(FilterBuilder):
 
         sanitizelist = [
             'CMakeCache.txt',
-            'zephyr/runners.yaml',
+            os.path.join('zephyr', 'runners.yaml'),
         ]
-        keep = [
-            'zephyr/zephyr.hex',
-            'zephyr/zephyr.bin',
-            'zephyr/zephyr.elf',
-            ]
+        platform = self.instance.platform
+        if platform.binaries:
+            keep = []
+            for binary in platform.binaries:
+                keep.append(os.path.join('zephyr', binary ))
+        else:
+            keep = [
+                os.path.join('zephyr', 'zephyr.hex'),
+                os.path.join('zephyr', 'zephyr.bin'),
+                os.path.join('zephyr', 'zephyr.elf'),
+                ]
 
         keep += sanitizelist
 
@@ -692,7 +744,7 @@ class ProjectBuilder(FilterBuilder):
             elif instance.status in ["skipped", "filtered"]:
                 more_info = instance.reason
             else:
-                if instance.handler and instance.run:
+                if instance.handler.ready and instance.run:
                     more_info = instance.handler.type_str
                     htime = instance.execution_time
                     if htime:
@@ -737,12 +789,13 @@ class ProjectBuilder(FilterBuilder):
         instance = self.instance
         args = self.testsuite.extra_args[:]
 
-        if instance.handler:
+        if instance.handler.ready:
             args += instance.handler.args
 
         # merge overlay files into one variable
+        # overlays with prefixes won't be merged but pass to cmake as they are
         def extract_overlays(args):
-            re_overlay = re.compile('OVERLAY_CONFIG=(.*)')
+            re_overlay = re.compile(r'^\s*OVERLAY_CONFIG=(.*)')
             other_args = []
             overlays = []
             for arg in args:
@@ -778,7 +831,7 @@ class ProjectBuilder(FilterBuilder):
 
         instance = self.instance
 
-        if instance.handler:
+        if instance.handler.ready:
             if instance.handler.type_str == "device":
                 instance.handler.duts = self.duts
 
@@ -788,33 +841,41 @@ class ProjectBuilder(FilterBuilder):
                     self.defconfig['CONFIG_FAKE_ENTROPY_NATIVE_POSIX'] == 'y'):
                     instance.handler.seed = self.options.seed
 
+            if self.options.extra_test_args and instance.platform.arch == "posix":
+                instance.handler.extra_test_args = self.options.extra_test_args
+
             instance.handler.handle()
 
         sys.stdout.flush()
 
-    def gather_metrics(self, instance):
+    def gather_metrics(self, instance: TestInstance):
         if self.options.enable_size_report and not self.options.cmake_only:
-            self.calc_one_elf_size(instance)
+            self.calc_size(instance=instance, from_buildlog=self.options.footprint_from_buildlog)
         else:
-            instance.metrics["ram_size"] = 0
-            instance.metrics["rom_size"] = 0
+            instance.metrics["used_ram"] = 0
+            instance.metrics["used_rom"] = 0
+            instance.metrics["available_rom"] = 0
+            instance.metrics["available_ram"] = 0
             instance.metrics["unrecognized"] = []
 
     @staticmethod
-    def calc_one_elf_size(instance):
+    def calc_size(instance: TestInstance, from_buildlog: bool):
         if instance.status not in ["error", "failed", "skipped"]:
-            if instance.platform.type != "native":
-                size_calc = instance.calculate_sizes()
-                instance.metrics["ram_size"] = size_calc.get_ram_size()
-                instance.metrics["rom_size"] = size_calc.get_rom_size()
+            if not instance.platform.type in ["native", "qemu", "unit"]:
+                generate_warning = bool(instance.platform.type == "mcu")
+                size_calc = instance.calculate_sizes(from_buildlog=from_buildlog, generate_warning=generate_warning)
+                instance.metrics["used_ram"] = size_calc.get_used_ram()
+                instance.metrics["used_rom"] = size_calc.get_used_rom()
+                instance.metrics["available_rom"] = size_calc.get_available_rom()
+                instance.metrics["available_ram"] = size_calc.get_available_ram()
                 instance.metrics["unrecognized"] = size_calc.unrecognized_sections()
             else:
-                instance.metrics["ram_size"] = 0
-                instance.metrics["rom_size"] = 0
+                instance.metrics["used_ram"] = 0
+                instance.metrics["used_rom"] = 0
+                instance.metrics["available_rom"] = 0
+                instance.metrics["available_ram"] = 0
                 instance.metrics["unrecognized"] = []
-
             instance.metrics["handler_time"] = instance.execution_time
-
 
 
 class TwisterRunner:
@@ -901,6 +962,8 @@ class TwisterRunner:
                 self.results.skipped_filter += 1
                 self.results.skipped_configs += 1
                 self.results.skipped_cases += len(instance.testsuite.testcases)
+            elif instance.status == 'error':
+                self.results.error += 1
 
     def update_counting_after_pipeline(self):
         '''
@@ -931,6 +994,9 @@ class TwisterRunner:
 
             if instance.status not in no_retry_statuses:
                 logger.debug(f"adding {instance.name}")
+                if instance.status:
+                    instance.retries += 1
+
                 instance.status = None
                 if test_only and instance.run:
                     pipeline.put({"op": "run", "test": instance})

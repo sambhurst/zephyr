@@ -66,12 +66,17 @@ static void process(const struct log_backend *const backend,
 	uint32_t flags;
 	struct backend_cb *cb = (struct backend_cb *)backend->cb->ctx;
 
+	/* If printk message skip it. */
+	if (log_msg_get_level(&(msg->log)) == LOG_LEVEL_INTERNAL_RAW_STRING) {
+		return;
+	}
+
 	if (IS_ENABLED(CONFIG_LOG_MODE_IMMEDIATE)) {
 		cb->sync++;
 	}
 
 	if (cb->check_domain_id) {
-		zassert_equal(log_msg_get_domain(&(msg->log)), CONFIG_LOG_DOMAIN_ID,
+		zassert_equal(log_msg_get_domain(&(msg->log)), Z_LOG_LOCAL_DOMAIN_ID,
 				"Unexpected domain id");
 	}
 
@@ -176,12 +181,32 @@ static bool log_test_process(void)
  * @brief Support multi-processor systems
  *
  * @details Logging system identify domain/processor by domain_id which is now
- *          statically configured by CONFIG_LOG_DOMAIN_ID
+ *          statically configured by Z_LOG_LOCAL_DOMAIN_ID
  *
  * @addtogroup logging
  */
 
 #ifndef CONFIG_USERSPACE
+
+/**
+ * @brief Create Tests for Dynamic Loadable Logging Backends
+ *
+ * @details Test the three APIs, log_backend_activate, log_backend_is_active and
+ *          log_backend_deactivate.
+ *
+ * @addtogroup logging
+ */
+ZTEST(test_log_core_additional, test_log_backend)
+{
+	log_init();
+
+	zassert_false(log_backend_is_active(&backend1));
+	log_backend_activate(&backend1, NULL);
+	zassert_true(log_backend_is_active(&backend1));
+	log_backend_deactivate(&backend1);
+	zassert_false(log_backend_is_active(&backend1));
+}
+
 ZTEST(test_log_core_additional, test_log_domain_id)
 {
 	log_setup(false);
@@ -307,7 +332,9 @@ ZTEST(test_log_core_additional, test_log_timestamping)
 	log_init();
 	/* deactivate all other backend */
 	STRUCT_SECTION_FOREACH(log_backend, backend) {
-		log_backend_deactivate(backend);
+		if ((backend == &backend1) || (backend == &backend2)) {
+			log_backend_deactivate(backend);
+		}
 	}
 
 	TC_PRINT("Register timestamp function\n");
@@ -461,7 +488,7 @@ ZTEST(test_log_core_additional, test_log_msg_create)
 					sizeof(msg_data), NULL);
 
 		Z_LOG_MSG2_CREATE(!IS_ENABLED(CONFIG_USERSPACE), mode,
-			  CONFIG_LOG_DOMAIN_ID, NULL,
+			  Z_LOG_LOCAL_DOMAIN_ID, NULL,
 			  LOG_LEVEL_INTERNAL_RAW_STRING, NULL, 0, test_msg_usr);
 
 		while (log_test_process()) {
@@ -487,7 +514,7 @@ ZTEST_USER(test_log_core_additional, test_log_msg_create_user)
 				sizeof(msg_data), test_msg_usr);
 
 	Z_LOG_MSG2_CREATE(!IS_ENABLED(CONFIG_USERSPACE), mode,
-		  CONFIG_LOG_DOMAIN_ID, NULL,
+			  Z_LOG_LOCAL_DOMAIN_ID, NULL,
 		  LOG_LEVEL_INTERNAL_RAW_STRING, NULL, 0, test_msg_usr);
 
 	while (log_test_process()) {

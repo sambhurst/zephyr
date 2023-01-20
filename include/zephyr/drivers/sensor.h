@@ -312,7 +312,12 @@ enum sensor_attribute {
 	SENSOR_ATTR_FEATURE_MASK,
 	/** Alert threshold or alert enable/disable */
 	SENSOR_ATTR_ALERT,
-
+	/** Free-fall duration represented in milliseconds.
+	 *  If the sampling frequency is changed during runtime,
+	 *  this attribute should be set to adjust freefall duration
+	 *  to the new sampling frequency.
+	 */
+	SENSOR_ATTR_FF_DUR,
 	/**
 	 * Number of all common sensor attributes.
 	 */
@@ -626,6 +631,33 @@ static inline void sensor_g_to_ms2(int32_t g, struct sensor_value *ms2)
 }
 
 /**
+ * @brief Helper function to convert acceleration from m/s^2 to micro Gs
+ *
+ * @param ms2 A pointer to a sensor_value struct holding the acceleration,
+ *            in m/s^2.
+ *
+ * @return The converted value, in micro Gs.
+ */
+static inline int32_t sensor_ms2_to_ug(const struct sensor_value *ms2)
+{
+	int64_t micro_ms2 = ms2->val1 * 1000000LL + ms2->val2;
+
+	return (micro_ms2 * 1000000LL) / SENSOR_G;
+}
+
+/**
+ * @brief Helper function to convert acceleration from micro Gs to m/s^2
+ *
+ * @param ug The micro G value to be converted.
+ * @param ms2 A pointer to a sensor_value struct, where the result is stored.
+ */
+static inline void sensor_ug_to_ms2(int32_t ug, struct sensor_value *ms2)
+{
+	ms2->val1 = ((int64_t)ug * SENSOR_G / 1000000LL) / 1000000LL;
+	ms2->val2 = ((int64_t)ug * SENSOR_G / 1000000LL) % 1000000LL;
+}
+
+/**
  * @brief Helper function for converting radians to degrees.
  *
  * @param rad A pointer to a sensor_value struct, holding the value in radians.
@@ -653,6 +685,36 @@ static inline void sensor_degrees_to_rad(int32_t d, struct sensor_value *rad)
 {
 	rad->val1 = ((int64_t)d * SENSOR_PI / 180LL) / 1000000LL;
 	rad->val2 = ((int64_t)d * SENSOR_PI / 180LL) % 1000000LL;
+}
+
+/**
+ * @brief Helper function for converting radians to 10 micro degrees.
+ *
+ * When the unit is 1 micro degree, the range that the int32_t can represent is
+ * +/-2147.483 degrees. In order to increase this range, here we use 10 micro
+ * degrees as the unit.
+ *
+ * @param rad A pointer to a sensor_value struct, holding the value in radians.
+ *
+ * @return The converted value, in 10 micro degrees.
+ */
+static inline int32_t sensor_rad_to_10udegrees(const struct sensor_value *rad)
+{
+	int64_t micro_rad_s = rad->val1 * 1000000LL + rad->val2;
+
+	return (micro_rad_s * 180LL * 100000LL) / SENSOR_PI;
+}
+
+/**
+ * @brief Helper function for converting 10 micro degrees to radians.
+ *
+ * @param d The value (in 10 micro degrees) to be converted.
+ * @param rad A pointer to a sensor_value struct, where the result is stored.
+ */
+static inline void sensor_10udegrees_to_rad(int32_t d, struct sensor_value *rad)
+{
+	rad->val1 = ((int64_t)d * SENSOR_PI / 180LL / 100000LL) / 1000000LL;
+	rad->val2 = ((int64_t)d * SENSOR_PI / 180LL / 100000LL) % 1000000LL;
 }
 
 /**
@@ -689,6 +751,114 @@ static inline int sensor_value_from_double(struct sensor_value *val, double inp)
 	val->val2 = (int32_t)val2;
 
 	return 0;
+}
+
+#ifdef CONFIG_SENSOR_INFO
+
+struct sensor_info {
+	const struct device *dev;
+	const char *vendor;
+	const char *model;
+	const char *friendly_name;
+};
+
+#define SENSOR_INFO_INITIALIZER(_dev, _vendor, _model, _friendly_name)	\
+	{								\
+		.dev = _dev,						\
+		.vendor = _vendor,					\
+		.model = _model,					\
+		.friendly_name = _friendly_name,			\
+	}
+
+#define SENSOR_INFO_DEFINE(name, ...)					\
+	static const STRUCT_SECTION_ITERABLE(sensor_info, name) =	\
+		SENSOR_INFO_INITIALIZER(__VA_ARGS__)
+
+#define SENSOR_INFO_DT_NAME(node_id)					\
+	_CONCAT(__sensor_info, DEVICE_DT_NAME_GET(node_id))
+
+#define SENSOR_INFO_DT_DEFINE(node_id)					\
+	SENSOR_INFO_DEFINE(SENSOR_INFO_DT_NAME(node_id),		\
+			   DEVICE_DT_GET(node_id),			\
+			   DT_NODE_VENDOR_OR(node_id, NULL),		\
+			   DT_NODE_MODEL_OR(node_id, NULL),		\
+			   DT_PROP_OR(node_id, friendly_name, NULL))	\
+
+#else
+
+#define SENSOR_INFO_DEFINE(name, ...)
+#define SENSOR_INFO_DT_DEFINE(node_id)
+
+#endif /* CONFIG_SENSOR_INFO */
+
+/**
+ * @brief Like DEVICE_DT_DEFINE() with sensor specifics.
+ *
+ * @details Defines a device which implements the sensor API. May define an
+ * element in the sensor info iterable section used to enumerate all sensor
+ * devices.
+ *
+ * @param node_id The devicetree node identifier.
+ *
+ * @param init_fn Name of the init function of the driver.
+ *
+ * @param pm_device PM device resources reference (NULL if device does not use
+ * PM).
+ *
+ * @param data_ptr Pointer to the device's private data.
+ *
+ * @param cfg_ptr The address to the structure containing the configuration
+ * information for this instance of the driver.
+ *
+ * @param level The initialization level. See SYS_INIT() for details.
+ *
+ * @param prio Priority within the selected initialization level. See
+ * SYS_INIT() for details.
+ *
+ * @param api_ptr Provides an initial pointer to the API function struct used
+ * by the driver. Can be NULL.
+ */
+#define SENSOR_DEVICE_DT_DEFINE(node_id, init_fn, pm_device,		\
+				data_ptr, cfg_ptr, level, prio,		\
+				api_ptr, ...)				\
+	DEVICE_DT_DEFINE(node_id, init_fn, pm_device,			\
+			 data_ptr, cfg_ptr, level, prio,		\
+			 api_ptr, __VA_ARGS__);				\
+									\
+	SENSOR_INFO_DT_DEFINE(node_id);
+
+/**
+ * @brief Like SENSOR_DEVICE_DT_DEFINE() for an instance of a DT_DRV_COMPAT
+ * compatible
+ *
+ * @param inst instance number. This is replaced by
+ * <tt>DT_DRV_COMPAT(inst)</tt> in the call to SENSOR_DEVICE_DT_DEFINE().
+ *
+ * @param ... other parameters as expected by SENSOR_DEVICE_DT_DEFINE().
+ */
+#define SENSOR_DEVICE_DT_INST_DEFINE(inst, ...)				\
+	SENSOR_DEVICE_DT_DEFINE(DT_DRV_INST(inst), __VA_ARGS__)
+
+/**
+ * @brief Helper function for converting struct sensor_value to integer milli units.
+ *
+ * @param val A pointer to a sensor_value struct.
+ * @return The converted value.
+ */
+static inline int64_t sensor_value_to_milli(struct sensor_value *val)
+{
+	return ((int64_t)val->val1 * 1000) + val->val2 / 1000;
+}
+
+/**
+ * @brief Helper function for converting struct sensor_value to integer micro units.
+ *
+ * @param val A pointer to a sensor_value struct.
+ * @return The converted value.
+ */
+static inline int64_t sensor_value_to_micro(struct sensor_value *val)
+{
+	return ((int64_t)val->val1 * 1000000) + val->val2;
 }
 
 /**

@@ -24,7 +24,7 @@ LOG_MODULE_REGISTER(wpan_serial, CONFIG_USB_DEVICE_LOG_LEVEL);
 #include <net_private.h>
 #include <zephyr/net/ieee802154_radio.h>
 
-#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+#if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 #define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
 #else
 #define THREAD_PRIORITY K_PRIO_PREEMPT(8)
@@ -58,7 +58,7 @@ static uint8_t slip_buf[1 + 2 * CONFIG_NET_BUF_DATA_SIZE];
 static struct ieee802154_radio_api *radio_api;
 static const struct device *const ieee802154_dev =
 	DEVICE_DT_GET(DT_CHOSEN(zephyr_ieee802154));
-uint8_t mac_addr[8];
+uint8_t mac_addr[8]; /* in little endian */
 
 /* UART device */
 static const struct device *const uart_dev =

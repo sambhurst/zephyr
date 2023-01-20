@@ -178,10 +178,12 @@ struct can_mcan_data {
 	void *cb_arg_ext[NUM_EXT_FILTER_DATA];
 	can_state_change_callback_t state_change_cb;
 	void *state_change_cb_data;
+	uint32_t std_filt_fd_frame;
 	uint32_t std_filt_rtr;
 	uint32_t std_filt_rtr_mask;
-	uint8_t ext_filt_rtr;
-	uint8_t ext_filt_rtr_mask;
+	uint16_t ext_filt_fd_frame;
+	uint16_t ext_filt_rtr;
+	uint16_t ext_filt_rtr_mask;
 	struct can_mcan_mm mm;
 	bool started;
 	void *custom;
@@ -283,7 +285,7 @@ int can_mcan_send(const struct device *dev, const struct can_frame *frame,
 		  k_timeout_t timeout, can_tx_callback_t callback,
 		  void *user_data);
 
-int can_mcan_get_max_filters(const struct device *dev, enum can_ide id_type);
+int can_mcan_get_max_filters(const struct device *dev, bool ide);
 
 int can_mcan_add_rx_filter(const struct device *dev,
 			   can_rx_callback_t callback, void *user_data,

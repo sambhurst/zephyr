@@ -104,7 +104,8 @@ static int get_timer_index(uint16_t obj_inst_id)
 static int start_timer(struct ipso_timer_data *timer)
 {
 	uint32_t temp = 0U;
-	char path[MAX_RESOURCE_LEN];
+	struct lwm2m_obj_path path = LWM2M_OBJ(IPSO_OBJECT_TIMER_ID, timer->obj_inst_id,
+					       DIGITAL_STATE_RID);
 
 	/* make sure timer is enabled and not already active */
 	if (timer->timer_mode == TIMER_MODE_OFF || timer->active ||
@@ -123,9 +124,7 @@ static int start_timer(struct ipso_timer_data *timer)
 	timer->trigger_offset = k_uptime_get();
 	timer->trigger_counter += 1U;
 
-	snprintk(path, MAX_RESOURCE_LEN, "%d/%u/%d", IPSO_OBJECT_TIMER_ID,
-		 timer->obj_inst_id, DIGITAL_STATE_RID);
-	lwm2m_engine_set_bool(path, true);
+	lwm2m_set_bool(&path, true);
 
 	temp = timer->delay_duration * MSEC_PER_SEC;
 	k_work_reschedule(&timer->timer_work, K_MSEC(temp));
@@ -135,7 +134,8 @@ static int start_timer(struct ipso_timer_data *timer)
 
 static int stop_timer(struct ipso_timer_data *timer, bool cancel)
 {
-	char path[MAX_RESOURCE_LEN];
+	struct lwm2m_obj_path path = LWM2M_OBJ(IPSO_OBJECT_TIMER_ID, timer->obj_inst_id,
+					       DIGITAL_STATE_RID);
 
 	/* make sure timer is active */
 	if (!timer->active) {
@@ -143,9 +143,7 @@ static int stop_timer(struct ipso_timer_data *timer, bool cancel)
 	}
 
 	timer->cumulative_time_ms += k_uptime_get() - timer->trigger_offset;
-	snprintk(path, MAX_RESOURCE_LEN, "%d/%u/%d", IPSO_OBJECT_TIMER_ID,
-		 timer->obj_inst_id, DIGITAL_STATE_RID);
-	lwm2m_engine_set_bool(path, false);
+	lwm2m_set_bool(&path, false);
 
 	if (cancel) {
 		k_work_cancel_delayable(&timer->timer_work);
@@ -275,7 +273,7 @@ static int timer_trigger_cb(uint16_t obj_inst_id,
 	return start_timer(&timer_data[i]);
 }
 
-static struct lwm2m_engine_obj_inst *timer_create(uint16_t obj_inst_id)
+static struct lwm2m_engine_obj_inst *timer_inst_create(uint16_t obj_inst_id)
 {
 	int index, avail = -1, i = 0, j = 0;
 
@@ -362,7 +360,7 @@ static int ipso_timer_init(const struct device *dev)
 	timer.fields = fields;
 	timer.field_count = ARRAY_SIZE(fields);
 	timer.max_instance_count = MAX_INSTANCE_COUNT;
-	timer.create_cb = timer_create;
+	timer.create_cb = timer_inst_create;
 	lwm2m_register_obj(&timer);
 
 	return 0;

@@ -194,7 +194,7 @@ static void __attribute__((unused)) get_YMD_from_seconds(uint64_t seconds,
 		output_date->year++;
 	}
 	/* compute the proper month */
-	for (i = 0; i < sizeof(days_in_month); i++) {
+	for (i = 0; i < ARRAY_SIZE(days_in_month); i++) {
 		tmp = ((i == 1) && is_leap_year(output_date->year)) ?
 					(days_in_month[i] + 1) * SECONDS_IN_DAY :
 					days_in_month[i] * SECONDS_IN_DAY;
@@ -528,13 +528,24 @@ void log_output_msg_process(const struct log_output *output,
 {
 	log_timestamp_t timestamp = log_msg_get_timestamp(msg);
 	uint8_t level = log_msg_get_level(msg);
-	void *source = (void *)log_msg_get_source(msg);
 	uint8_t domain_id = log_msg_get_domain(msg);
-	int16_t source_id = source ?
-			(IS_ENABLED(CONFIG_LOG_RUNTIME_FILTERING) ?
-				log_dynamic_source_id(source) :
-				log_const_source_id(source)) :
-			-1;
+	int16_t source_id;
+
+	if (IS_ENABLED(CONFIG_LOG_MULTIDOMAIN) && domain_id != Z_LOG_LOCAL_DOMAIN_ID) {
+		/* Remote domain is converting source pointer to ID */
+		source_id = (int16_t)(uintptr_t)log_msg_get_source(msg);
+	} else {
+		void *source = (void *)log_msg_get_source(msg);
+
+		if (source != NULL) {
+			source_id = IS_ENABLED(CONFIG_LOG_RUNTIME_FILTERING) ?
+					log_dynamic_source_id(source) :
+					log_const_source_id(source);
+		} else {
+			source_id = -1;
+		}
+	}
+
 	const char *sname = source_id >= 0 ? log_source_name_get(domain_id, source_id) : NULL;
 	size_t plen, dlen;
 	uint8_t *package = log_msg_get_package(msg, &plen);

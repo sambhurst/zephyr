@@ -10,6 +10,7 @@
 #define LOG_LEVEL CONFIG_COUNTER_LOG_LEVEL
 #define LOG_MODULE_NAME counter_timer
 #include <zephyr/logging/log.h>
+#include <zephyr/irq.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME, LOG_LEVEL);
 
 #define TIMER_CLOCK 16000000
@@ -92,17 +93,11 @@ static int get_value(const struct device *dev, uint32_t *ticks)
 	return 0;
 }
 
-/* Return true if value equals 2^n - 1 */
-static inline bool is_bit_mask(uint32_t val)
-{
-	return !(val & (val + 1));
-}
-
 static uint32_t ticks_add(uint32_t val1, uint32_t val2, uint32_t top)
 {
 	uint32_t to_top;
 
-	if (likely(is_bit_mask(top))) {
+	if (likely(IS_BIT_MASK(top))) {
 		return (val1 + val2) & top;
 	}
 
@@ -113,7 +108,7 @@ static uint32_t ticks_add(uint32_t val1, uint32_t val2, uint32_t top)
 
 static uint32_t ticks_sub(uint32_t val, uint32_t old, uint32_t top)
 {
-	if (likely(is_bit_mask(top))) {
+	if (likely(IS_BIT_MASK(top))) {
 		return (val - old) & top;
 	}
 

@@ -40,10 +40,16 @@ config ISR_STACK_SIZE
 config HEAP_MEM_POOL_SIZE
 	default 32768
 
-config MP_NUM_CPUS
+config MP_MAX_NUM_CPUS
 	default 1
 
 config MINIMAL_LIBC_OPTIMIZE_STRING_FOR_SIZE
 	default n
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default $(dt_node_int_prop_int,/cpus/cpu@0,clock-frequency)
+
+config XTENSA_CCOUNT_HZ
+	default SYS_CLOCK_HW_CYCLES_PER_SEC
 
 endif

@@ -12,11 +12,11 @@ LOG_MODULE_DECLARE(tagoio_http_post, CONFIG_TAGOIO_HTTP_POST_LOG_LEVEL);
 #include <zephyr/net/socketutils.h>
 #include <zephyr/net/dns_resolve.h>
 #include <zephyr/net/tls_credentials.h>
-#include <zephyr/net/http_client.h>
+#include <zephyr/net/http/client.h>
 
 #include "sockets.h"
 
-#if IS_ENABLED(CONFIG_TAGOIO_MANUAL_SERVER)
+#if defined(CONFIG_TAGOIO_MANUAL_SERVER)
 #define TAGOIO_SERVER CONFIG_TAGOIO_API_SERVER_IP
 #else
 #define TAGOIO_SERVER "api.tago.io"

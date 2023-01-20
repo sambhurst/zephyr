@@ -97,25 +97,23 @@ uint8_t lwm2m_firmware_get_update_state(void)
 void lwm2m_firmware_set_update_state_inst(uint16_t obj_inst_id, uint8_t state)
 {
 	bool error = false;
-	char path[LWM2M_MAX_PATH_STR_LEN];
-
-	snprintk(path, sizeof(path), "%" PRIu16 "/%" PRIu16 "/%" PRIu16,
-		LWM2M_OBJECT_FIRMWARE_ID, obj_inst_id, FIRMWARE_UPDATE_RESULT_ID);
+	struct lwm2m_obj_path path = LWM2M_OBJ(LWM2M_OBJECT_FIRMWARE_ID, obj_inst_id,
+					       FIRMWARE_UPDATE_RESULT_ID);
 
 	/* Check LWM2M SPEC appendix E.6.1 */
 	switch (state) {
 	case STATE_DOWNLOADING:
 		if (update_state[obj_inst_id] == STATE_IDLE) {
-			lwm2m_engine_set_u8(path, RESULT_DEFAULT);
+			lwm2m_set_u8(&path, RESULT_DEFAULT);
 		} else {
 			error = true;
 		}
 		break;
 	case STATE_DOWNLOADED:
 		if (update_state[obj_inst_id] == STATE_DOWNLOADING) {
-			lwm2m_engine_set_u8(path, RESULT_DEFAULT);
+			lwm2m_set_u8(&path, RESULT_DEFAULT);
 		} else if (update_state[obj_inst_id] == STATE_UPDATING) {
-			lwm2m_engine_set_u8(path, RESULT_UPDATE_FAILED);
+			lwm2m_set_u8(&path, RESULT_UPDATE_FAILED);
 		} else {
 			error = true;
 		}
@@ -137,10 +135,9 @@ void lwm2m_firmware_set_update_state_inst(uint16_t obj_inst_id, uint8_t state)
 			update_state[obj_inst_id], state);
 	}
 
-	snprintk(path, sizeof(path), "%" PRIu16 "/%" PRIu16 "/%" PRIu16,
-		 LWM2M_OBJECT_FIRMWARE_ID, obj_inst_id, FIRMWARE_STATE_ID);
+	path.res_id = FIRMWARE_STATE_ID;
 
-	lwm2m_engine_set_u8(path, state);
+	lwm2m_set_u8(&path, state);
 
 	LOG_DBG("Update state = %d", state);
 }
@@ -164,7 +161,8 @@ void lwm2m_firmware_set_update_result_inst(uint16_t obj_inst_id, uint8_t result)
 {
 	uint8_t state;
 	bool error = false;
-	char path[LWM2M_MAX_PATH_STR_LEN];
+	struct lwm2m_obj_path path = LWM2M_OBJ(LWM2M_OBJECT_FIRMWARE_ID, obj_inst_id,
+					       FIRMWARE_UPDATE_RESULT_ID);
 
 	/* Check LWM2M SPEC appendix E.6.1 */
 	switch (result) {
@@ -220,10 +218,7 @@ void lwm2m_firmware_set_update_result_inst(uint16_t obj_inst_id, uint8_t result)
 			result, state);
 	}
 
-	snprintk(path, sizeof(path), "%" PRIu16 "/%" PRIu16 "/%" PRIu16,
-		 LWM2M_OBJECT_FIRMWARE_ID, obj_inst_id, FIRMWARE_UPDATE_RESULT_ID);
-
-	lwm2m_engine_set_u8(path, result);
+	lwm2m_set_u8(&path, result);
 
 	LOG_DBG("Update result = %d", result);
 }
@@ -301,9 +296,8 @@ static int package_uri_write_cb(uint16_t obj_inst_id, uint16_t res_id,
 	uint8_t state = lwm2m_firmware_get_update_state_inst(obj_inst_id);
 
 	if (state == STATE_IDLE) {
-		lwm2m_firmware_set_update_result_inst(obj_inst_id, RESULT_DEFAULT);
-
 		if (data_len > 0) {
+			lwm2m_firmware_set_update_state_inst(obj_inst_id, STATE_DOWNLOADING);
 			lwm2m_firmware_start_transfer(obj_inst_id, package_uri[obj_inst_id]);
 		}
 	} else if (state == STATE_DOWNLOADED && data_len == 0U) {

@@ -8,6 +8,7 @@
 #define ZEPHYR_INCLUDE_IPC_SERVICE_IPC_SERVICE_BACKEND_H_
 
 #include <zephyr/ipc/ipc_service.h>
+#include <zephyr/kernel.h>
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -15,8 +16,9 @@ extern "C" {
 #endif
 
 /**
- * @brief IPC Service backend
- * @ingroup ipc_service_api
+ * @brief IPC service backend
+ * @defgroup ipc_service_backend IPC service backend
+ * @ingroup ipc
  * @{
  */
 

@@ -43,6 +43,12 @@ mapping:
         required: false
         sequence:
           - type: str
+      "ignore_faults":
+        type: bool
+        required: false
+      "ignore_qemu_crash":
+        type: bool
+        required: false
       "testcases":
         type: seq
         required: false
@@ -109,6 +115,12 @@ mapping:
         required: false
         sequence:
           - type: str
+      "platform_key":
+        required: false
+        type: seq
+        matching: "all"
+        sequence:
+          - type: str
       "tags":
         type: str
         required: false
@@ -128,6 +140,9 @@ mapping:
         type: bool
         required: false
       "slow":
+        type: bool
+        required: false
+      "sysbuild":
         type: bool
         required: false
   # The sample descriptor, if present
@@ -196,6 +211,12 @@ mapping:
             required: false
             sequence:
               - type: str
+          "ignore_faults":
+            type: bool
+            required: false
+          "ignore_qemu_crash":
+            type: bool
+            required: false
           "harness":
             type: str
             required: false
@@ -257,6 +278,12 @@ mapping:
             required: false
             sequence:
               - type: str
+          "platform_key":
+            required: false
+            type: seq
+            matching: "all"
+            sequence:
+              - type: str
           "tags":
             type: str
             required: false
@@ -276,5 +303,8 @@ mapping:
             type: bool
             required: false
           "slow":
+            type: bool
+            required: false
+          "sysbuild":
             type: bool
             required: false

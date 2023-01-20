@@ -31,22 +31,41 @@ only builds a test and doesn't run it:
 - You or some higher level automation invoked twister with
   ``--build-only``.
 
-These also affect the outputs of ``--testcase-report`` and
-``--detailed-report``, see their respective ``--help`` sections.
-
 To run the script in the local tree, follow the steps below:
 
-::
+.. tabs::
 
-        $ source zephyr-env.sh
-        $ ./scripts/twister
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+         $ source zephyr-env.sh
+         $ ./scripts/twister
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+         zephyr-env.cmd
+         python .\scripts\twister
+
 
 If you have a system with a large number of cores and plenty of free storage space,
 you can build and run all possible tests using the following options:
 
-::
+.. tabs::
 
-        $ ./scripts/twister --all --enable-slow
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+         $ ./scripts/twister --all --enable-slow
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+         python .\scripts\twister --all --enable-slow
 
 This will build for all available boards and run all applicable tests in
 a simulated (for example QEMU) environment.
@@ -57,10 +76,21 @@ option, test suites will only be built/run on the platforms specified.
 This option also supports different revisions of one same board,
 you can use ``--platform board@revision`` to test on a specific revision.
 
-The list of command line options supported by twister can be viewed using::
+The list of command line options supported by twister can be viewed using:
 
-        $ ./scripts/twister --help
+.. tabs::
 
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+         $ ./scripts/twister --help
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+         python .\scripts\twister --help
 
 
 Board Configuration
@@ -117,6 +147,8 @@ name:
   The actual name of the board as it appears in marketing material.
 type:
   Type of the board or configuration, currently we support 2 types: mcu, qemu
+simulation:
+  Simulator used to simulate the platform, e.g. qemu.
 arch:
   Architecture of the board
 toolchain:
@@ -280,6 +312,19 @@ extra_configs: <list of extra configurations>
             extra_configs:
               - CONFIG_ADC_ASYNC=y
 
+    Using namespacing, it is possible to apply a configuration only to some
+    hardware. Currently both architectures and platforms are supported::
+
+        common:
+          tags: drivers adc
+        tests:
+          test:
+            depends_on: adc
+          test_async:
+            extra_configs:
+              - arch:x86:CONFIG_ADC_ASYNC=y
+              - platform:qemu_x86:CONFIG_DEBUG=y
+
 
 build_only: <True|False> (default False)
     If true, don't try to run the test even if the
@@ -330,12 +375,39 @@ extra_sections: <list of extra binary sections>
     extra, unexpected sections in the Zephyr binary unless they are named
     here. They will not be included in the size calculation.
 
+sysbuild: <True|False> (default False)
+    Build the project using sysbuild infrastructure. Only the main project's
+    generated devicetree and Kconfig will be used for filtering tests.
+    on device testing must use the hardware map, or west flash to load
+    the images onto the target. The --erase option of west flash is
+    not supported with this option. Usage of unsupported options will result
+    in tests requiring sysbuild support being skipped.
+
 harness: <string>
     A harness string needed to run the tests successfully. This can be as
     simple as a loopback wiring or a complete hardware test setup for
     sensor and IO testing.
     Usually pertains to external dependency domains but can be anything such as
     console, sensor, net, keyboard, Bluetooth or pytest.
+
+platform_key: <list of platform attributes>
+    Often a test needs to only be built and run once to qualify as passing.
+    Imagine a library of code that depends on the platform architecture where
+    passing the test on a single platform for each arch is enough to qualify the
+    tests and code as passing. The platform_key attribute enables doing just
+    that.
+
+    For example to key on (arch, simulation) to ensure a test is run once
+    per arch and simulation (as would be most common)::
+
+      platform_key:
+        - arch
+        - simulation
+
+    Adding platform (board) attributes to include things such as soc name,
+    soc family, and perhaps sets of IP blocks implementing each peripheral
+    interface would enable other interesting uses. For example, this could enable
+    building and running SPI tests once for eacn unique IP block.
 
 harness_config: <harness configuration options>
     Extra harness configuration options to be used to select a board and/or
@@ -519,10 +591,23 @@ Executing tests on a single device
 ===================================
 
 To use this feature on a single connected device, run twister with
-the following new options::
+the following new options:
 
-	scripts/twister --device-testing --device-serial /dev/ttyACM0 \
-	--device-serial-baud 9600 -p frdm_k64f  -T tests/kernel
+.. tabs::
+
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+	      scripts/twister --device-testing --device-serial /dev/ttyACM0 \
+	      --device-serial-baud 115200 -p frdm_k64f  -T tests/kernel
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+	      python .\scripts\twister --device-testing --device-serial COM1 \
+	      --device-serial-baud 115200 -p frdm_k64f  -T tests/kernel
 
 The ``--device-serial`` option denotes the serial device the board is connected to.
 This needs to be accessible by the user running twister. You can run this on
@@ -533,10 +618,22 @@ The ``--device-serial-baud`` option is only needed if your device does not run a
 
 To support devices without a physical serial port, use the ``--device-serial-pty``
 option. In this cases, log messages are captured for example using a script.
-In this case you can run twister with the following options::
+In this case you can run twister with the following options:
 
-    scripts/twister --device-testing --device-serial-pty "script.py" \
-    -p intel_adsp_cavs25 -T tests/kernel
+.. tabs::
+
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+         scripts/twister --device-testing --device-serial-pty "script.py" \
+         -p intel_adsp_cavs25 -T tests/kernel
+
+   .. group-tab:: Windows
+
+      .. note::
+
+         Not supported on Windows OS
 
 The script is user-defined and handles delivering the messages which can be
 used by twister to determine the test execution status.
@@ -548,46 +645,106 @@ Executing tests on multiple devices
 To build and execute tests on multiple devices connected to the host PC, a
 hardware map needs to be created with all connected devices and their
 details such as the serial device, baud and their IDs if available.
-Run the following command to produce the hardware map::
+Run the following command to produce the hardware map:
 
-    ./scripts/twister --generate-hardware-map map.yml
+.. tabs::
+
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+         ./scripts/twister --generate-hardware-map map.yml
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+         python .\scripts\twister --generate-hardware-map map.yml
 
 The generated hardware map file (map.yml) will have the list of connected
-devices, for example::
+devices, for example:
 
-  - connected: true
-    id: OSHW000032254e4500128002ab98002784d1000097969900
-    platform: unknown
-    product: DAPLink CMSIS-DAP
-    runner: pyocd
-    serial: /dev/cu.usbmodem146114202
-  - connected: true
-    id: 000683759358
-    platform: unknown
-    product: J-Link
-    runner: unknown
-    serial: /dev/cu.usbmodem0006837593581
+.. tabs::
+
+   .. group-tab:: Linux
+
+    ::
+
+      - connected: true
+        id: OSHW000032254e4500128002ab98002784d1000097969900
+        platform: unknown
+        product: DAPLink CMSIS-DAP
+        runner: pyocd
+        serial: /dev/cu.usbmodem146114202
+      - connected: true
+        id: 000683759358
+        platform: unknown
+        product: J-Link
+        runner: unknown
+        serial: /dev/cu.usbmodem0006837593581
+
+   .. group-tab:: Windows
+
+    ::
+
+      - connected: true
+        id: OSHW000032254e4500128002ab98002784d1000097969900
+        platform: unknown
+        product: unknown
+        runner: unknown
+        serial: COM1
+      - connected: true
+        id: 000683759358
+        platform: unknown
+        product: unknown
+        runner: unknown
+        serial: COM2
 
 
 Any options marked as 'unknown' need to be changed and set with the correct
-values, in the above example both the platform names and the runners need to be
-replaced with the correct values corresponding to the connected hardware. In
-this example we are using a reel_board and an nrf52840dk_nrf52840::
+values, in the above example the platform names, the products and the runners need
+to be replaced with the correct values corresponding to the connected hardware.
+In this example we are using a reel_board and an nrf52840dk_nrf52840:
 
-  - connected: true
-    id: OSHW000032254e4500128002ab98002784d1000097969900
-    platform: reel_board
-    product: DAPLink CMSIS-DAP
-    runner: pyocd
-    serial: /dev/cu.usbmodem146114202
-    baud: 9600
-  - connected: true
-    id: 000683759358
-    platform: nrf52840dk_nrf52840
-    product: J-Link
-    runner: nrfjprog
-    serial: /dev/cu.usbmodem0006837593581
-    baud: 9600
+.. tabs::
+
+   .. group-tab:: Linux
+
+    ::
+
+      - connected: true
+        id: OSHW000032254e4500128002ab98002784d1000097969900
+        platform: reel_board
+        product: DAPLink CMSIS-DAP
+        runner: pyocd
+        serial: /dev/cu.usbmodem146114202
+        baud: 9600
+      - connected: true
+        id: 000683759358
+        platform: nrf52840dk_nrf52840
+        product: J-Link
+        runner: nrfjprog
+        serial: /dev/cu.usbmodem0006837593581
+        baud: 9600
+
+   .. group-tab:: Windows
+
+    ::
+
+      - connected: true
+        id: OSHW000032254e4500128002ab98002784d1000097969900
+        platform: reel_board
+        product: DAPLink CMSIS-DAP
+        runner: pyocd
+        serial: COM1
+        baud: 9600
+      - connected: true
+        id: 000683759358
+        platform: nrf52840dk_nrf52840
+        product: J-Link
+        runner: nrfjprog
+        serial: COM2
+        baud: 9600
 
 The baud entry is only needed if not running at 115200.
 
@@ -596,9 +753,20 @@ will be updated. This way you can use one single master hardware map and update
 it for every run to get the correct serial devices and status of the devices.
 
 With the hardware map ready, you can run any tests by pointing to the map
-file::
 
-  ./scripts/twister --device-testing --hardware-map map.yml -T samples/hello_world/
+.. tabs::
+
+   .. group-tab:: Linux
+
+      .. code-block:: bash
+
+         ./scripts/twister --device-testing --hardware-map map.yml -T samples/hello_world/
+
+   .. group-tab:: Windows
+
+      .. code-block:: bat
+
+         python .\scripts\twister --device-testing --hardware-map map.yml -T samples\hello_world
 
 The above command will result in twister building tests for the platforms
 defined in the hardware map and subsequently flashing and running the tests
@@ -635,13 +803,24 @@ hardware map::
 
 The runner_params field indicates the parameters you want to pass to the
 west runner. For some boards the west runner needs some extra parameters to
-work. It is equivalent to following west and twister commands::
+work. It is equivalent to following west and twister commands.
 
-   west flash --remote-host remote_host_ip_addr --key /path/to/key.pem
+.. tabs::
 
-   twister -p intel_adsp_cavs18 --device-testing --device-serial-pty script.py
-   --west-flash="--remote-host=remote_host_ip_addr,--key=/path/to/key.pem"
+   .. group-tab:: Linux
 
+      .. code-block:: bash
+
+         west flash --remote-host remote_host_ip_addr --key /path/to/key.pem
+
+         twister -p intel_adsp_cavs18 --device-testing --device-serial-pty script.py
+         --west-flash="--remote-host=remote_host_ip_addr,--key=/path/to/key.pem"
+
+   .. group-tab:: Windows
+
+      .. note::
+
+         Not supported on Windows OS
 
 .. note::
 
@@ -723,14 +902,15 @@ using an external J-Link probe.  The "probe_id" keyword overrides the
 Quarantine
 ++++++++++
 
-Twister allows using user-defined yaml files defining the list of tests to be put
-under quarantine. Such tests will be skipped and marked accordingly in the output
-reports. This feature is especially useful when running larger test suits, where
-a failure of one test can affect the execution of other tests (e.g. putting the
-physical board in a corrupted state).
+Twister allows user to provide onfiguration files defining a list of tests or
+platforms to be put under quarantine. Such tests will be skipped and marked
+accordingly in the output reports. This feature is especially useful when
+running larger test suits, where a failure of one test can affect the execution
+of other tests (e.g. putting the physical board in a corrupted state).
 
 To use the quarantine feature one has to add the argument
 ``--quarantine-list <PATH_TO_QUARANTINE_YAML>`` to a twister call.
+Multiple quarantine files can be used.
 The current status of tests on the quarantine list can also be verified by adding
 ``--quarantine-verify`` to the above argument. This will make twister skip all tests
 which are not on the given list.
@@ -741,21 +921,32 @@ to put under quarantine. In addition, an optional entry "comment" can be used, w
 some more details can be given (e.g. link to a reported issue). These comments will also
 be added to the output reports.
 
+When quarantining a class of tests or many scenarios in a single testsuite or
+when dealing with multiple issues within a subsystem, it is possible to use
+regular expressions, for example, **kernel.*** would quarantine
+all kernel tests.
+
 An example of entries in a quarantine yaml::
 
     - scenarios:
         - sample.basic.helloworld
-      platforms:
-        - all
       comment: "Link to the issue: https://github.com/zephyrproject-rtos/zephyr/pull/33287"
 
     - scenarios:
         - kernel.common
-        - kernel.common.misra
+        - kernel.common.(misra|tls)
         - kernel.common.nano64
       platforms:
-        - qemu_cortex_m3
+        - .*_cortex_.*
         - native_posix
+
+To exclude a platform, use the following syntax::
+
+    - platforms:
+      - qemu_x86
+      comment: "broken qemu"
+
+Additionally you can quarantine entire architectures or a specific simulator for executing tests.
 
 Running in Tests in Random Order
 ********************************

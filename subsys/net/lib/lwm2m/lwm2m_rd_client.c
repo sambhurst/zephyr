@@ -69,7 +69,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define CLIENT_EP_LEN		CONFIG_LWM2M_RD_CLIENT_ENDPOINT_NAME_MAX_LENGTH
 
-#define CLIENT_BINDING_LEN sizeof("U")
+#define CLIENT_BINDING_LEN sizeof("UQ")
 #define CLIENT_QUEUE_LEN sizeof("Q")
 
 static void sm_handle_registration_update_failure(void);
@@ -436,7 +436,7 @@ static int do_registration_reply_cb(const struct coap_packet *response,
 {
 	struct coap_option options[2];
 	uint8_t code;
-	int ret;
+	int ret = -EINVAL;
 
 	code = coap_header_get_code(response);
 	LOG_DBG("Registration callback (code:%u.%u)",
@@ -448,8 +448,9 @@ static int do_registration_reply_cb(const struct coap_packet *response,
 		ret = coap_find_options(response, COAP_OPTION_LOCATION_PATH,
 					options, 2);
 		if (ret < 2) {
-			LOG_ERR("Unexpected endpoint data returned.");
-			return -EINVAL;
+			LOG_ERR("Unexpected endpoint data returned. ret = %d", ret);
+			ret = -EINVAL;
+			goto fail;
 		}
 
 		/* option[0] should be "rd" */
@@ -459,7 +460,8 @@ static int do_registration_reply_cb(const struct coap_packet *response,
 				    "%u (expected %zu)\n",
 				    options[1].len,
 				    sizeof(client.server_ep));
-			return -EINVAL;
+			ret = -EINVAL;
+			goto fail;
 		}
 
 		/* remember the last reg time */
@@ -478,10 +480,10 @@ static int do_registration_reply_cb(const struct coap_packet *response,
 	LOG_ERR("Failed with code %u.%u (%s). Not Retrying.",
 		COAP_RESPONSE_CODE_CLASS(code), COAP_RESPONSE_CODE_DETAIL(code),
 		code2str(code));
-
+fail:
 	sm_handle_failure_state(ENGINE_IDLE);
 
-	return 0;
+	return ret;
 }
 
 static void do_registration_timeout_cb(struct lwm2m_message *msg)
@@ -569,12 +571,10 @@ static void do_deregister_timeout_cb(struct lwm2m_message *msg)
 
 static bool sm_bootstrap_verify(bool bootstrap_server, int sec_obj_inst)
 {
-	char pathstr[MAX_RESOURCE_LEN];
 	bool bootstrap;
 	int ret;
 
-	snprintk(pathstr, sizeof(pathstr), "0/%d/1", sec_obj_inst);
-	ret = lwm2m_engine_get_bool(pathstr, &bootstrap);
+	ret = lwm2m_get_bool(&LWM2M_OBJ(0, sec_obj_inst, 1), &bootstrap);
 	if (ret < 0) {
 		LOG_WRN("Failed to check bootstrap, err %d", ret);
 		return false;
@@ -589,11 +589,9 @@ static bool sm_bootstrap_verify(bool bootstrap_server, int sec_obj_inst)
 
 static bool sm_update_lifetime(int srv_obj_inst, uint32_t *lifetime)
 {
-	char pathstr[MAX_RESOURCE_LEN];
 	uint32_t new_lifetime;
 
-	snprintk(pathstr, sizeof(pathstr), "1/%d/1", srv_obj_inst);
-	if (lwm2m_engine_get_u32(pathstr, &new_lifetime) < 0) {
+	if (lwm2m_get_u32(&LWM2M_OBJ(1, srv_obj_inst, 1), &new_lifetime) < 0) {
 		new_lifetime = CONFIG_LWM2M_ENGINE_DEFAULT_LIFETIME;
 		LOG_INF("Using default lifetime: %u", new_lifetime);
 	}
@@ -609,12 +607,10 @@ static bool sm_update_lifetime(int srv_obj_inst, uint32_t *lifetime)
 static int sm_select_server_inst(int sec_obj_inst, int *srv_obj_inst,
 				 uint32_t *lifetime)
 {
-	char pathstr[MAX_RESOURCE_LEN];
 	uint16_t server_id;
 	int ret, obj_inst_id;
 
-	snprintk(pathstr, sizeof(pathstr), "0/%d/10", sec_obj_inst);
-	ret = lwm2m_engine_get_u16(pathstr, &server_id);
+	ret = lwm2m_get_u16(&LWM2M_OBJ(0, sec_obj_inst, 10), &server_id);
 	if (ret < 0) {
 		LOG_WRN("Failed to obtain Short Server ID, err %d", ret);
 		return -EINVAL;
@@ -1113,6 +1109,13 @@ static int sm_do_deregister(void)
 	struct lwm2m_message *msg;
 	int ret;
 
+	if (lwm2m_engine_connection_resume(client.ctx)) {
+		lwm2m_engine_context_close(client.ctx);
+		/* Connection failed, enter directly to deregistered state */
+		set_sm_state(ENGINE_DEREGISTERED);
+		return 0;
+	}
+
 	msg = rd_get_message();
 	if (!msg) {
 		LOG_ERR("Unable to get a lwm2m message!");
@@ -1352,11 +1355,12 @@ int lwm2m_rd_client_stop(struct lwm2m_ctx *client_ctx,
 
 	LOG_INF("Stop LWM2M Client: %s", client.ep_name);
 
+	k_mutex_unlock(&client.mutex);
 
 	while (get_sm_state() != ENGINE_IDLE) {
 		k_sleep(K_MSEC(STATE_MACHINE_UPDATE_INTERVAL_MS / 2));
 	}
-	k_mutex_unlock(&client.mutex);
+
 	return 0;
 }
 

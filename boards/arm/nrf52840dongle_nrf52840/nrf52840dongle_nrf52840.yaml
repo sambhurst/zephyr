@@ -17,3 +17,5 @@ supported:
   - spi
   - watchdog
   - counter
+  - netif:openthread
+  - gpio

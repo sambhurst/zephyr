@@ -185,21 +185,30 @@ int boot_request_upgrade_multi(int image_index, int permanent)
 
 bool boot_is_img_confirmed(void)
 {
+	struct boot_swap_state state;
 	const struct flash_area *fa;
 	int rc;
-	uint8_t flag_val;
 
 	rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY, &fa);
 	if (rc) {
 		return false;
 	}
 
-	rc = boot_read_image_ok(fa, &flag_val);
-	if (rc) {
+	rc = boot_read_swap_state(fa, &state);
+	if (rc != 0) {
 		return false;
 	}
 
-	return flag_val == BOOT_FLAG_SET;
+	if (state.magic == BOOT_MAGIC_UNSET) {
+		/* This is initial/preprogramed image.
+		 * Such image can neither be reverted nor physically confirmed.
+		 * Treat this image as confirmed which ensures consistency
+		 * with `boot_write_img_confirmed...()` procedures.
+		 */
+		return true;
+	}
+
+	return state.image_ok == BOOT_FLAG_SET;
 }
 
 int boot_write_img_confirmed(void)
@@ -241,4 +250,31 @@ int boot_erase_img_bank(uint8_t area_id)
 	flash_area_close(fa);
 
 	return rc;
+}
+
+ssize_t boot_get_trailer_status_offset(size_t area_size)
+{
+	return (ssize_t)area_size - BOOT_MAGIC_SZ - BOOT_MAX_ALIGN * 2;
+}
+
+ssize_t boot_get_area_trailer_status_offset(uint8_t area_id)
+{
+	int rc;
+	const struct flash_area *fa;
+	ssize_t offset;
+
+	rc = flash_area_open(area_id, &fa);
+	if (rc) {
+		return rc;
+	}
+
+	offset = boot_get_trailer_status_offset(fa->fa_size);
+
+	flash_area_close(fa);
+
+	if (offset < 0) {
+		return -EFAULT;
+	}
+
+	return offset;
 }

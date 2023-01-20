@@ -69,9 +69,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include "lwm2m_rw_oma_tlv.h"
 #include "lwm2m_engine.h"
-#ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
 #include "lwm2m_rd_client.h"
-#endif
 #include "lwm2m_util.h"
 
 enum {
@@ -497,6 +495,12 @@ static int put_s64(struct lwm2m_output_context *out,
 	return len;
 }
 
+
+static int put_time(struct lwm2m_output_context *out, struct lwm2m_obj_path *path, time_t value)
+{
+	return put_s64(out, path, (int64_t)value);
+}
+
 static int put_string(struct lwm2m_output_context *out,
 		      struct lwm2m_obj_path *path, char *buf, size_t buflen)
 {
@@ -622,6 +626,17 @@ static int get_number(struct lwm2m_input_context *in, int64_t *value,
 static int get_s64(struct lwm2m_input_context *in, int64_t *value)
 {
 	return get_number(in, value, 8);
+}
+
+static int get_time(struct lwm2m_input_context *in, time_t *value)
+{
+	int64_t temp64;
+	int ret;
+
+	ret = get_number(in, &temp64, 8);
+	*value = (time_t)temp64;
+
+	return ret;
 }
 
 static int get_s32(struct lwm2m_input_context *in, int32_t *value)
@@ -772,7 +787,7 @@ const struct lwm2m_writer oma_tlv_writer = {
 	.put_s64 = put_s64,
 	.put_string = put_string,
 	.put_float = put_float,
-	.put_time = put_s64,
+	.put_time = put_time,
 	.put_bool = put_bool,
 	.put_opaque = put_opaque,
 	.put_objlnk = put_objlnk,
@@ -782,7 +797,7 @@ const struct lwm2m_reader oma_tlv_reader = {
 	.get_s32 = get_s32,
 	.get_s64 = get_s64,
 	.get_string = get_string,
-	.get_time = get_s64,
+	.get_time = get_time,
 	.get_float = get_float,
 	.get_bool = get_bool,
 	.get_opaque = get_opaque,
@@ -986,11 +1001,9 @@ int do_write_op_tlv(struct lwm2m_message *msg)
 					return ret;
 				}
 
-#ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
 				if (!msg->ctx->bootstrap_mode) {
 					engine_trigger_update(true);
 				}
-#endif
 			}
 
 			while (pos < tlv.length &&

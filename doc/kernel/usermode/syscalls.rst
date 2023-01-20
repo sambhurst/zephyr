@@ -96,7 +96,7 @@ always contains ``${ZEPHYR_BASE}/include``, but will also contain
 is set, or ``${ZEPHYR_BASE}/subsys/testsuite/ztest/include`` when
 ``CONFIG_ZTEST`` is set. Additional paths can be added to the list
 through the CMake command line or in CMake code that is run before
-``${ZEPHYR_BASE}/cmake/app/boilerplate.cmake`` is run.
+``find_package(Zephyr ...)`` is run.
 
 Invocation Context
 ==================
@@ -414,7 +414,7 @@ bytes processed. This too should use a stack copy:
 
         Z_OOPS(z_user_from_copy(&size, size_ptr, sizeof(size));
         ret = z_impl_in_out_syscall(&size);
-        *size_ptr = size;
+        Z_OOPS(z_user_to_copy(size_ptr, &size, sizeof(size)));
         return ret;
     }
 

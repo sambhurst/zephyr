@@ -3,16 +3,16 @@
 
 description: STM32 family VBAT node
 
-include: base.yaml
+include: sensor-device.yaml
 
 compatible: "st,stm32-vbat"
 
 properties:
-    io-channels:
-      required: true
-      description: ADC channel for Vbat sensor
+  io-channels:
+    required: true
+    description: ADC channel for Vbat sensor
 
-    ratio:
-      type: int
-      required: true
-      description: fraction of VBat to be connected to the ADC input
+  ratio:
+    type: int
+    required: true
+    description: fraction of VBat to be connected to the ADC input

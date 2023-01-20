@@ -15,6 +15,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <fsl_flexcan.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/irq.h>
 
 #ifdef CONFIG_PINCTRL
 #include <zephyr/drivers/pinctrl.h>
@@ -89,6 +90,8 @@ struct mcux_flexcan_config {
 	uint32_t phase_seg1;
 	uint32_t phase_seg2;
 	void (*irq_config_func)(const struct device *dev);
+	void (*irq_enable_func)(void);
+	void (*irq_disable_func)(void);
 	const struct device *phy;
 	uint32_t max_bitrate;
 #ifdef CONFIG_PINCTRL
@@ -119,6 +122,7 @@ struct mcux_flexcan_data {
 
 	ATOMIC_DEFINE(tx_allocs, MCUX_FLEXCAN_MAX_TX);
 	struct k_sem tx_allocs_sem;
+	struct k_mutex tx_mutex;
 	struct mcux_flexcan_tx_callback tx_cbs[MCUX_FLEXCAN_MAX_TX];
 	enum can_state state;
 	can_state_change_callback_t state_change_cb;
@@ -134,9 +138,9 @@ static int mcux_flexcan_get_core_clock(const struct device *dev, uint32_t *rate)
 	return clock_control_get_rate(config->clock_dev, config->clock_subsys, rate);
 }
 
-static int mcux_flexcan_get_max_filters(const struct device *dev, enum can_ide id_type)
+static int mcux_flexcan_get_max_filters(const struct device *dev, bool ide)
 {
-	ARG_UNUSED(id_type);
+	ARG_UNUSED(ide);
 
 	return CONFIG_CAN_MAX_FILTER;
 }
@@ -312,18 +316,20 @@ static int mcux_flexcan_set_mode(const struct device *dev, can_mode_t mode)
 static void mcux_flexcan_from_can_frame(const struct can_frame *src,
 					flexcan_frame_t *dest)
 {
-	if (src->id_type == CAN_STANDARD_IDENTIFIER) {
-		dest->format = kFLEXCAN_FrameFormatStandard;
-		dest->id = FLEXCAN_ID_STD(src->id);
-	} else {
+	memset(dest, 0, sizeof(*dest));
+
+	if ((src->flags & CAN_FRAME_IDE) != 0) {
 		dest->format = kFLEXCAN_FrameFormatExtend;
 		dest->id = FLEXCAN_ID_EXT(src->id);
+	} else {
+		dest->format = kFLEXCAN_FrameFormatStandard;
+		dest->id = FLEXCAN_ID_STD(src->id);
 	}
 
-	if (src->rtr == CAN_DATAFRAME) {
-		dest->type = kFLEXCAN_FrameTypeData;
-	} else {
+	if ((src->flags & CAN_FRAME_RTR) != 0) {
 		dest->type = kFLEXCAN_FrameTypeRemote;
+	} else {
+		dest->type = kFLEXCAN_FrameTypeData;
 	}
 
 	dest->length = src->dlc;
@@ -334,18 +340,17 @@ static void mcux_flexcan_from_can_frame(const struct can_frame *src,
 static void mcux_flexcan_to_can_frame(const flexcan_frame_t *src,
 				      struct can_frame *dest)
 {
+	memset(dest, 0, sizeof(*dest));
+
 	if (src->format == kFLEXCAN_FrameFormatStandard) {
-		dest->id_type = CAN_STANDARD_IDENTIFIER;
 		dest->id = FLEXCAN_ID_TO_CAN_ID_STD(src->id);
 	} else {
-		dest->id_type = CAN_EXTENDED_IDENTIFIER;
+		dest->flags |= CAN_FRAME_IDE;
 		dest->id = FLEXCAN_ID_TO_CAN_ID_EXT(src->id);
 	}
 
-	if (src->type == kFLEXCAN_FrameTypeData) {
-		dest->rtr = CAN_DATAFRAME;
-	} else {
-		dest->rtr = CAN_REMOTEREQUEST;
+	if (src->type == kFLEXCAN_FrameTypeRemote) {
+		dest->flags |= CAN_FRAME_RTR;
 	}
 
 	dest->dlc = src->length;
@@ -360,20 +365,24 @@ static void mcux_flexcan_can_filter_to_mbconfig(const struct can_filter *src,
 						flexcan_rx_mb_config_t *dest,
 						uint32_t *mask)
 {
-	if (src->id_type == CAN_STANDARD_IDENTIFIER) {
-		dest->format = kFLEXCAN_FrameFormatStandard;
-		dest->id = FLEXCAN_ID_STD(src->id);
-		*mask = FLEXCAN_RX_MB_STD_MASK(src->id_mask, src->rtr_mask, 1);
-	} else {
+	static const uint32_t ide_mask = 1U;
+	uint32_t rtr_mask = (src->flags & (CAN_FILTER_DATA | CAN_FILTER_RTR)) !=
+		(CAN_FILTER_DATA | CAN_FILTER_RTR) ? 1U : 0U;
+
+	if ((src->flags & CAN_FILTER_IDE) != 0) {
 		dest->format = kFLEXCAN_FrameFormatExtend;
 		dest->id = FLEXCAN_ID_EXT(src->id);
-		*mask = FLEXCAN_RX_MB_EXT_MASK(src->id_mask, src->rtr_mask, 1);
+		*mask = FLEXCAN_RX_MB_EXT_MASK(src->mask, rtr_mask, ide_mask);
+	} else {
+		dest->format = kFLEXCAN_FrameFormatStandard;
+		dest->id = FLEXCAN_ID_STD(src->id);
+		*mask = FLEXCAN_RX_MB_STD_MASK(src->mask, rtr_mask, ide_mask);
 	}
 
-	if ((src->rtr & src->rtr_mask) == CAN_DATAFRAME) {
-		dest->type = kFLEXCAN_FrameTypeData;
-	} else {
+	if ((src->flags & CAN_FILTER_RTR) != 0) {
 		dest->type = kFLEXCAN_FrameTypeRemote;
+	} else {
+		dest->type = kFLEXCAN_FrameTypeData;
 	}
 }
 
@@ -430,6 +439,11 @@ static int mcux_flexcan_send(const struct device *dev,
 		return -EINVAL;
 	}
 
+	if ((frame->flags & ~(CAN_FRAME_IDE | CAN_FRAME_RTR)) != 0) {
+		LOG_ERR("unsupported CAN frame flags 0x%02x", frame->flags);
+		return -ENOTSUP;
+	}
+
 	if (!data->started) {
 		return -ENETDOWN;
 	}
@@ -456,8 +470,12 @@ static int mcux_flexcan_send(const struct device *dev,
 	xfer.frame = &data->tx_cbs[alloc].frame;
 	xfer.mbIdx = ALLOC_IDX_TO_TXMB_IDX(alloc);
 	FLEXCAN_SetTxMbConfig(config->base, xfer.mbIdx, true);
+	k_mutex_lock(&data->tx_mutex, K_FOREVER);
+	config->irq_disable_func();
 	status = FLEXCAN_TransferSendNonBlocking(config->base, &data->handle,
 						 &xfer);
+	config->irq_enable_func();
+	k_mutex_unlock(&data->tx_mutex);
 	if (status != kStatus_Success) {
 		return -EIO;
 	}
@@ -479,6 +497,11 @@ static int mcux_flexcan_add_rx_filter(const struct device *dev,
 	int i;
 
 	__ASSERT_NO_MSG(callback);
+
+	if ((filter->flags & ~(CAN_FILTER_IDE | CAN_FILTER_DATA | CAN_FILTER_RTR)) != 0) {
+		LOG_ERR("unsupported CAN filter flags 0x%02x", filter->flags);
+		return -ENOTSUP;
+	}
 
 	k_mutex_lock(&data->rx_mutex, K_FOREVER);
 
@@ -790,6 +813,7 @@ static int mcux_flexcan_init(const struct device *dev)
 	}
 
 	k_mutex_init(&data->rx_mutex);
+	k_mutex_init(&data->tx_mutex);
 	k_sem_init(&data->tx_allocs_sem, MCUX_FLEXCAN_MAX_TX,
 		   MCUX_FLEXCAN_MAX_TX);
 
@@ -908,18 +932,24 @@ static const struct can_driver_api mcux_flexcan_driver_api = {
 	}
 };
 
-#define FLEXCAN_IRQ_CODE(id, name) \
-	do {								\
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(id, name, irq),		\
-		DT_INST_IRQ_BY_NAME(id, name, priority),		\
-		mcux_flexcan_isr,					\
-		DEVICE_DT_INST_GET(id), 0);				\
-		irq_enable(DT_INST_IRQ_BY_NAME(id, name, irq));		\
-	} while (false)
+#define FLEXCAN_IRQ_BY_IDX(node_id, prop, idx, cell) \
+	DT_IRQ_BY_NAME(node_id, \
+		DT_STRING_TOKEN_BY_IDX(node_id, prop, idx), cell)
 
-#define FLEXCAN_IRQ(id, name) \
-	COND_CODE_1(DT_INST_IRQ_HAS_NAME(id, name), \
-		(FLEXCAN_IRQ_CODE(id, name)), ())
+#define FLEXCAN_IRQ_ENABLE_CODE(node_id, prop, idx) \
+	irq_enable(FLEXCAN_IRQ_BY_IDX(node_id, prop, idx, irq));
+
+#define FLEXCAN_IRQ_DISABLE_CODE(node_id, prop, idx) \
+	irq_disable(FLEXCAN_IRQ_BY_IDX(node_id, prop, idx, irq));
+
+#define FLEXCAN_IRQ_CONFIG_CODE(node_id, prop, idx) \
+	do {								\
+		IRQ_CONNECT(FLEXCAN_IRQ_BY_IDX(node_id, prop, idx, irq), \
+		FLEXCAN_IRQ_BY_IDX(node_id, prop, idx, priority), \
+		mcux_flexcan_isr, \
+		DEVICE_DT_GET(node_id), 0); \
+		FLEXCAN_IRQ_ENABLE_CODE(node_id, prop, idx); \
+	} while (false);
 
 #ifdef CONFIG_PINCTRL
 #define FLEXCAN_PINCTRL_DEFINE(id) PINCTRL_DT_INST_DEFINE(id);
@@ -934,6 +964,8 @@ static const struct can_driver_api mcux_flexcan_driver_api = {
 	FLEXCAN_PINCTRL_DEFINE(id)					\
 									\
 	static void mcux_flexcan_irq_config_##id(const struct device *dev); \
+	static void mcux_flexcan_irq_enable_##id(void); \
+	static void mcux_flexcan_irq_disable_##id(void); \
 									\
 	static const struct mcux_flexcan_config mcux_flexcan_config_##id = { \
 		.base = (CAN_Type *)DT_INST_REG_ADDR(id),		\
@@ -948,6 +980,8 @@ static const struct can_driver_api mcux_flexcan_driver_api = {
 		.phase_seg2 = DT_INST_PROP_OR(id, phase_seg2, 0),	\
 		.sample_point = DT_INST_PROP_OR(id, sample_point, 0),	\
 		.irq_config_func = mcux_flexcan_irq_config_##id,	\
+		.irq_enable_func = mcux_flexcan_irq_enable_##id,	\
+		.irq_disable_func = mcux_flexcan_irq_disable_##id,	\
 		.phy = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(id, phys)),\
 		.max_bitrate = DT_INST_CAN_TRANSCEIVER_MAX_BITRATE(id, 1000000), \
 		FLEXCAN_PINCTRL_INIT(id)				\
@@ -963,14 +997,17 @@ static const struct can_driver_api mcux_flexcan_driver_api = {
 									\
 	static void mcux_flexcan_irq_config_##id(const struct device *dev) \
 	{								\
-		FLEXCAN_IRQ(id, rx_warning);				\
-		FLEXCAN_IRQ(id, tx_warning);				\
-		FLEXCAN_IRQ(id, bus_off);				\
-		FLEXCAN_IRQ(id, warning);				\
-		FLEXCAN_IRQ(id, error);					\
-		FLEXCAN_IRQ(id, wake_up);				\
-		FLEXCAN_IRQ(id, mb_0_15);				\
-		FLEXCAN_IRQ(id, common);				\
+		DT_INST_FOREACH_PROP_ELEM(id, interrupt_names, FLEXCAN_IRQ_CONFIG_CODE); \
+	} \
+									\
+	static void mcux_flexcan_irq_enable_##id(void) \
+	{								\
+		DT_INST_FOREACH_PROP_ELEM(id, interrupt_names, FLEXCAN_IRQ_ENABLE_CODE); \
+	} \
+									\
+	static void mcux_flexcan_irq_disable_##id(void) \
+	{								\
+		DT_INST_FOREACH_PROP_ELEM(id, interrupt_names, FLEXCAN_IRQ_DISABLE_CODE); \
 	}
 
 DT_INST_FOREACH_STATUS_OKAY(FLEXCAN_DEVICE_INIT_MCUX)

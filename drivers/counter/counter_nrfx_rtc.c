@@ -16,6 +16,7 @@
 
 #define LOG_MODULE_NAME counter_rtc
 #include <zephyr/logging/log.h>
+#include <zephyr/irq.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_COUNTER_LOG_LEVEL);
 
 #define ERR(...) LOG_INST_ERR( \
@@ -101,12 +102,6 @@ static int get_value(const struct device *dev, uint32_t *ticks)
 	return 0;
 }
 
-/* Return true if value equals 2^n - 1 */
-static inline bool is_bit_mask(uint32_t val)
-{
-	return !(val & (val + 1));
-}
-
 /* Function calculates distance between to values assuming that one first
  * argument is in front and that values wrap.
  */
@@ -115,7 +110,7 @@ static uint32_t ticks_sub(const struct device *dev, uint32_t val,
 {
 	if (IS_FIXED_TOP(dev)) {
 		return (val - old) & COUNTER_MAX_TOP_VALUE;
-	} else if (likely(is_bit_mask(top))) {
+	} else if (likely(IS_BIT_MASK(top))) {
 		return (val - old) & top;
 	}
 
@@ -145,7 +140,7 @@ static uint32_t ticks_add(const struct device *dev, uint32_t val1,
 		ARG_UNUSED(top);
 		return sum & COUNTER_MAX_TOP_VALUE;
 	}
-	if (likely(is_bit_mask(top))) {
+	if (likely(IS_BIT_MASK(top))) {
 		sum = sum & top;
 	} else {
 		sum = sum > top ? sum - (top + 1) : sum;

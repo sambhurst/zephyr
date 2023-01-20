@@ -31,12 +31,13 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/ethernet.h>
 #include <ethernet/eth_stats.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/irq.h>
 
 #if defined(CONFIG_PTP_CLOCK_MCUX)
 #include <zephyr/drivers/ptp_clock.h>
 #endif
 
-#if IS_ENABLED(CONFIG_NET_DSA)
+#if defined(CONFIG_NET_DSA)
 #include <zephyr/net/dsa.h>
 #endif
 
@@ -867,7 +868,7 @@ static int eth_rx(struct eth_context *context)
 #endif /* CONFIG_PTP_CLOCK_MCUX */
 
 	iface = get_iface(context, vlan_tag);
-#if IS_ENABLED(CONFIG_NET_DSA)
+#if defined(CONFIG_NET_DSA)
 	iface = dsa_net_recv(iface, &pkt);
 #endif
 	if (net_recv_data(iface, pkt) < 0) {
@@ -1199,11 +1200,11 @@ static void eth_iface_init(struct net_if *iface)
 		context->iface = iface;
 	}
 
-#if IS_ENABLED(CONFIG_NET_DSA)
+#if defined(CONFIG_NET_DSA)
 	dsa_register_master_tx(iface, &eth_tx);
 #endif
 	ethernet_init(iface);
-	net_if_flag_set(iface, NET_IF_NO_AUTO_START);
+	net_if_carrier_off(iface);
 
 	context->config_func();
 }
@@ -1216,7 +1217,7 @@ static enum ethernet_hw_caps eth_mcux_get_capabilities(const struct device *dev)
 #if defined(CONFIG_PTP_CLOCK_MCUX)
 		ETHERNET_PTP |
 #endif
-#if IS_ENABLED(CONFIG_NET_DSA)
+#if defined(CONFIG_NET_DSA)
 		ETHERNET_DSA_MASTER_PORT |
 #endif
 #if defined(CONFIG_ETH_MCUX_HW_ACCELERATION)
@@ -1271,7 +1272,7 @@ static const struct ethernet_api api_funcs = {
 #endif
 	.get_capabilities	= eth_mcux_get_capabilities,
 	.set_config		= eth_mcux_set_config,
-#if IS_ENABLED(CONFIG_NET_DSA)
+#if defined(CONFIG_NET_DSA)
 	.send                   = dsa_tx,
 #else
 	.send			= eth_tx,

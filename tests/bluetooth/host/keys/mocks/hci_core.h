@@ -6,10 +6,12 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/fff.h>
-#include <bluetooth/addr.h>
+#include <zephyr/bluetooth/addr.h>
 
 /* List of fakes used by this unit tester */
 #define HCI_CORE_FFF_FAKES_LIST(FAKE)       \
 		FAKE(bt_unpair)                     \
+		FAKE(bt_id_add)                     \
 
 DECLARE_FAKE_VALUE_FUNC(int, bt_unpair, uint8_t, const bt_addr_le_t *);
+DECLARE_FAKE_VOID_FUNC(bt_id_add, struct bt_keys *);

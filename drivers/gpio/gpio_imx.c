@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/irq.h>
 #include <soc.h>
 #include <zephyr/sys/util.h>
 #include <gpio_imx.h>
@@ -17,7 +18,7 @@
 #include <zephyr/drivers/pinctrl.h>
 #endif
 
-#include "gpio_utils.h"
+#include <zephyr/drivers/gpio/gpio_utils.h>
 
 struct imx_gpio_config {
 	/* gpio_driver_config needs to be first */
@@ -68,6 +69,9 @@ static int imx_gpio_configure(const struct device *port, gpio_pin_t pin,
 #endif
 	if (((flags & GPIO_PULL_UP) != 0) || ((flags & GPIO_PULL_DOWN) != 0)) {
 		reg |= BIT(MCUX_IMX_PULL_ENABLE_SHIFT);
+#ifdef CONFIG_SOC_MCIMX6X_M4
+		reg |= BIT(MCUX_IMX_BIAS_BUS_HOLD_SHIFT);
+#endif
 		if (((flags & GPIO_PULL_UP) != 0)) {
 			reg |= BIT(MCUX_IMX_BIAS_PULL_UP_SHIFT);
 		} else {
@@ -76,6 +80,9 @@ static int imx_gpio_configure(const struct device *port, gpio_pin_t pin,
 	} else {
 		/* Set pin to highz */
 		reg &= ~BIT(MCUX_IMX_PULL_ENABLE_SHIFT);
+#ifdef CONFIG_SOC_MCIMX6X_M4
+		reg &= ~BIT(MCUX_IMX_BIAS_BUS_HOLD_SHIFT);
+#endif
 	}
 
 	/* Init pin configuration struct, and use pinctrl api to apply settings */

@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/net/lwm2m.h>
+#include "modules.h"
 
 #define APP_BANNER "Run LWM2M client"
 
@@ -46,13 +47,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define CLIENT_DEVICE_TYPE	"OMA-LWM2M Client"
 #define CLIENT_HW_VER		"1.0.1"
 
-#define LIGHT_NAME		"Test light"
-#define TIMER_NAME		"Test timer"
-
 #define ENDPOINT_LEN		32
-
-/* If led0 gpios doesn't exist the relevant IPSO object will simply not be created. */
-static const struct gpio_dt_spec led_gpio = GPIO_DT_SPEC_GET_OR(DT_ALIAS(led0), gpios, {});
 
 static uint8_t bat_idx = LWM2M_DEVICE_PWR_SRC_TYPE_BAT_INT;
 static int bat_mv = 3800;
@@ -65,14 +60,7 @@ static uint8_t bat_status = LWM2M_DEVICE_BATTERY_STATUS_CHARGING;
 static int mem_free = 15;
 static int mem_total = 25;
 
-static uint32_t led_state;
-
 static struct lwm2m_ctx client;
-
-#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_SUPPORT)
-/* Array with supported PULL firmware update protocols */
-static uint8_t supported_protocol[1];
-#endif
 
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #define TLS_TAG			1
@@ -88,56 +76,6 @@ static const char client_psk_id[] = "Client_identity";
 
 static struct k_sem quit_lock;
 
-#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
-static uint8_t firmware_buf[64];
-#endif
-
-/* TODO: Move to a pre write hook that can handle ret codes once available */
-static int led_on_off_cb(uint16_t obj_inst_id, uint16_t res_id, uint16_t res_inst_id,
-			 uint8_t *data, uint16_t data_len,
-			 bool last_block, size_t total_size)
-{
-	int ret = 0;
-	uint32_t led_val;
-
-	led_val = *(uint8_t *) data;
-	if (led_val != led_state) {
-		ret = gpio_pin_set_dt(&led_gpio, (int) led_val);
-		if (ret) {
-			/*
-			 * We need an extra hook in LWM2M to better handle
-			 * failures before writing the data value and not in
-			 * post_write_cb, as there is not much that can be
-			 * done here.
-			 */
-			LOG_ERR("Fail to write to GPIO %d", led_gpio.pin);
-			return ret;
-		}
-
-		led_state = led_val;
-		/* TODO: Move to be set by an internal post write function */
-		lwm2m_engine_set_s32("3311/0/5852", 0);
-	}
-
-	return ret;
-}
-
-static int init_led_device(void)
-{
-	int ret;
-
-	if (!device_is_ready(led_gpio.port)) {
-		return -ENODEV;
-	}
-
-	ret = gpio_pin_configure_dt(&led_gpio, GPIO_OUTPUT_INACTIVE);
-	if (ret) {
-		return ret;
-	}
-
-	return 0;
-}
-
 static int device_reboot_cb(uint16_t obj_inst_id,
 			    uint8_t *args, uint16_t args_len)
 {
@@ -145,7 +83,7 @@ static int device_reboot_cb(uint16_t obj_inst_id,
 	/* Add an error for testing */
 	lwm2m_device_add_err(LWM2M_DEVICE_ERROR_LOW_POWER);
 	/* Change the battery voltage for testing */
-	lwm2m_engine_set_s32("3/0/7/0", (bat_mv - 1));
+	lwm2m_set_s32(&LWM2M_OBJ(3, 0, 7, 0), (bat_mv - 1));
 
 	return 0;
 }
@@ -157,119 +95,11 @@ static int device_factory_default_cb(uint16_t obj_inst_id,
 	/* Add an error for testing */
 	lwm2m_device_add_err(LWM2M_DEVICE_ERROR_GPS_FAILURE);
 	/* Change the USB current for testing */
-	lwm2m_engine_set_s32("3/0/8/1", (usb_ma - 1));
+	lwm2m_set_s32(&LWM2M_OBJ(3, 0, 8, 1), (usb_ma - 1));
 
 	return 0;
 }
 
-#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_SUPPORT)
-static int firmware_update_cb(uint16_t obj_inst_id,
-			      uint8_t *args, uint16_t args_len)
-{
-	LOG_DBG("UPDATE");
-
-	/* TODO: kick off update process */
-
-	/* If success, set the update result as RESULT_SUCCESS.
-	 * In reality, it should be set at function lwm2m_setup()
-	 */
-	lwm2m_engine_set_u8("5/0/3", STATE_IDLE);
-	lwm2m_engine_set_u8("5/0/5", RESULT_SUCCESS);
-	return 0;
-}
-#endif
-
-
-static void *temperature_get_buf(uint16_t obj_inst_id, uint16_t res_id,
-				 uint16_t res_inst_id, size_t *data_len)
-{
-	/* Last read temperature value, will use 25.5C if no sensor available */
-	static double v = 25.5;
-	const struct device *dev = NULL;
-
-#if defined(CONFIG_FXOS8700_TEMP)
-	dev = DEVICE_DT_GET_ONE(nxp_fxos8700);
-
-	if (!device_is_ready(dev)) {
-		LOG_ERR("%s: device not ready.", dev->name);
-		return;
-	}
-#endif
-
-	if (dev != NULL) {
-		struct sensor_value val;
-
-		if (sensor_sample_fetch(dev)) {
-			LOG_ERR("temperature data update failed");
-		}
-
-		sensor_channel_get(dev, SENSOR_CHAN_DIE_TEMP, &val);
-
-		v = sensor_value_to_double(&val);
-
-		LOG_DBG("LWM2M temperature set to %f", v);
-	}
-
-	/* echo the value back through the engine to update min/max values */
-	lwm2m_engine_set_float("3303/0/5700", &v);
-	*data_len = sizeof(v);
-	return &v;
-}
-
-
-#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
-static void *firmware_get_buf(uint16_t obj_inst_id, uint16_t res_id,
-			      uint16_t res_inst_id, size_t *data_len)
-{
-	*data_len = sizeof(firmware_buf);
-	return firmware_buf;
-}
-
-static int firmware_block_received_cb(uint16_t obj_inst_id,
-				      uint16_t res_id, uint16_t res_inst_id,
-				      uint8_t *data, uint16_t data_len,
-				      bool last_block, size_t total_size)
-{
-	LOG_INF("FIRMWARE: BLOCK RECEIVED: len:%u last_block:%d",
-		data_len, last_block);
-	return 0;
-}
-#endif
-
-/* An example data validation callback. */
-static int timer_on_off_validate_cb(uint16_t obj_inst_id, uint16_t res_id,
-				    uint16_t res_inst_id, uint8_t *data,
-				    uint16_t data_len, bool last_block,
-				    size_t total_size)
-{
-	LOG_INF("Validating On/Off data");
-
-	if (data_len != 1) {
-		return -EINVAL;
-	}
-
-	if (*data > 1) {
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int timer_digital_state_cb(uint16_t obj_inst_id,
-				  uint16_t res_id, uint16_t res_inst_id,
-				  uint8_t *data, uint16_t data_len,
-				  bool last_block, size_t total_size)
-{
-	bool *digital_state = (bool *)data;
-
-	if (*digital_state) {
-		LOG_INF("TIMER: ON");
-	} else {
-		LOG_INF("TIMER: OFF");
-	}
-
-	return 0;
-}
 
 static int lwm2m_setup(void)
 {
@@ -280,7 +110,8 @@ static int lwm2m_setup(void)
 	/* setup SECURITY object */
 
 	/* Server URL */
-	ret = lwm2m_engine_get_res_buf("0/0/0", (void **)&server_url, &server_url_len, NULL, NULL);
+	ret = lwm2m_get_res_buf(&LWM2M_OBJ(0, 0, 0), (void **)&server_url, &server_url_len, NULL,
+				NULL);
 	if (ret < 0) {
 		return ret;
 	}
@@ -290,129 +121,82 @@ static int lwm2m_setup(void)
 				  strchr(SERVER_ADDR, ':') ? "[" : "", SERVER_ADDR,
 				  strchr(SERVER_ADDR, ':') ? "]" : "");
 
-	lwm2m_engine_set_res_data_len("0/0/0", server_url_len + 1);
+	lwm2m_set_res_data_len(&LWM2M_OBJ(0, 0, 0), server_url_len + 1);
 
 	/* Security Mode */
-	lwm2m_engine_set_u8("0/0/2", IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? 0 : 3);
+	lwm2m_set_u8(&LWM2M_OBJ(0, 0, 2), IS_ENABLED(CONFIG_LWM2M_DTLS_SUPPORT) ? 0 : 3);
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
-	lwm2m_engine_set_string("0/0/3", (char *)client_psk_id);
-	lwm2m_engine_set_opaque("0/0/5",
+	lwm2m_set_string(&LWM2M_OBJ(0, 0, 3), (char *)client_psk_id);
+	lwm2m_set_opaque(&LWM2M_OBJ(0, 0, 5),
 				(void *)client_psk, sizeof(client_psk));
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
 
 #if defined(CONFIG_LWM2M_RD_CLIENT_SUPPORT_BOOTSTRAP)
 	/* Mark 1st instance of security object as a bootstrap server */
-	lwm2m_engine_set_u8("0/0/1", 1);
+	lwm2m_set_u8(&LWM2M_OBJ(0, 0, 1), 1);
 
 	/* Create 2nd instance of security object needed for bootstrap */
-	lwm2m_engine_create_obj_inst("0/1");
+	lwm2m_create_object_inst(&LWM2M_OBJ(0, 1));
 #else
 	/* Match Security object instance with a Server object instance with
 	 * Short Server ID.
 	 */
-	lwm2m_engine_set_u16("0/0/10", CONFIG_LWM2M_SERVER_DEFAULT_SSID);
-	lwm2m_engine_set_u16("1/0/0", CONFIG_LWM2M_SERVER_DEFAULT_SSID);
+	lwm2m_set_u16(&LWM2M_OBJ(0, 0, 10), CONFIG_LWM2M_SERVER_DEFAULT_SSID);
+	lwm2m_set_u16(&LWM2M_OBJ(1, 0, 0), CONFIG_LWM2M_SERVER_DEFAULT_SSID);
 #endif
 
 	/* setup SERVER object */
 
 	/* setup DEVICE object */
 
-	lwm2m_engine_set_res_buf("3/0/0", CLIENT_MANUFACTURER,
-				 sizeof(CLIENT_MANUFACTURER),
-				 sizeof(CLIENT_MANUFACTURER),
-				 LWM2M_RES_DATA_FLAG_RO);
-	lwm2m_engine_set_res_buf("3/0/1", CLIENT_MODEL_NUMBER,
-				 sizeof(CLIENT_MODEL_NUMBER),
-				 sizeof(CLIENT_MODEL_NUMBER),
-				 LWM2M_RES_DATA_FLAG_RO);
-	lwm2m_engine_set_res_buf("3/0/2", CLIENT_SERIAL_NUMBER,
-				 sizeof(CLIENT_SERIAL_NUMBER),
-				 sizeof(CLIENT_SERIAL_NUMBER),
-				 LWM2M_RES_DATA_FLAG_RO);
-	lwm2m_engine_set_res_buf("3/0/3", CLIENT_FIRMWARE_VER,
-				 sizeof(CLIENT_FIRMWARE_VER),
-				 sizeof(CLIENT_FIRMWARE_VER),
-				 LWM2M_RES_DATA_FLAG_RO);
-	lwm2m_engine_register_exec_callback("3/0/4", device_reboot_cb);
-	lwm2m_engine_register_exec_callback("3/0/5", device_factory_default_cb);
-	lwm2m_engine_set_res_buf("3/0/9", &bat_level, sizeof(bat_level),
-				 sizeof(bat_level), 0);
-	lwm2m_engine_set_res_buf("3/0/10", &mem_free, sizeof(mem_free),
-				 sizeof(mem_free), 0);
-	lwm2m_engine_set_res_buf("3/0/17", CLIENT_DEVICE_TYPE,
-				 sizeof(CLIENT_DEVICE_TYPE),
-				 sizeof(CLIENT_DEVICE_TYPE),
-				 LWM2M_RES_DATA_FLAG_RO);
-	lwm2m_engine_set_res_buf("3/0/18", CLIENT_HW_VER,
-				 sizeof(CLIENT_HW_VER), sizeof(CLIENT_HW_VER),
-				 LWM2M_RES_DATA_FLAG_RO);
-	lwm2m_engine_set_res_buf("3/0/20", &bat_status, sizeof(bat_status),
-				 sizeof(bat_status), 0);
-	lwm2m_engine_set_res_buf("3/0/21", &mem_total, sizeof(mem_total),
-				 sizeof(mem_total), 0);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 0), CLIENT_MANUFACTURER, sizeof(CLIENT_MANUFACTURER),
+			  sizeof(CLIENT_MANUFACTURER), LWM2M_RES_DATA_FLAG_RO);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 1), CLIENT_MODEL_NUMBER, sizeof(CLIENT_MODEL_NUMBER),
+			  sizeof(CLIENT_MODEL_NUMBER), LWM2M_RES_DATA_FLAG_RO);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 2), CLIENT_SERIAL_NUMBER, sizeof(CLIENT_SERIAL_NUMBER),
+			  sizeof(CLIENT_SERIAL_NUMBER), LWM2M_RES_DATA_FLAG_RO);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 3), CLIENT_FIRMWARE_VER, sizeof(CLIENT_FIRMWARE_VER),
+			  sizeof(CLIENT_FIRMWARE_VER), LWM2M_RES_DATA_FLAG_RO);
+	lwm2m_register_exec_callback(&LWM2M_OBJ(3, 0, 4), device_reboot_cb);
+	lwm2m_register_exec_callback(&LWM2M_OBJ(3, 0, 5), device_factory_default_cb);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 9), &bat_level, sizeof(bat_level), sizeof(bat_level), 0);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 10), &mem_free, sizeof(mem_free), sizeof(mem_free), 0);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 17), CLIENT_DEVICE_TYPE, sizeof(CLIENT_DEVICE_TYPE),
+			  sizeof(CLIENT_DEVICE_TYPE), LWM2M_RES_DATA_FLAG_RO);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 18), CLIENT_HW_VER, sizeof(CLIENT_HW_VER),
+			  sizeof(CLIENT_HW_VER), LWM2M_RES_DATA_FLAG_RO);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 20), &bat_status, sizeof(bat_status),
+			  sizeof(bat_status), 0);
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 21), &mem_total, sizeof(mem_total),
+			  sizeof(mem_total), 0);
 
 	/* add power source resource instances */
-	lwm2m_engine_create_res_inst("3/0/6/0");
-	lwm2m_engine_set_res_buf("3/0/6/0", &bat_idx, sizeof(bat_idx),
-				 sizeof(bat_idx), 0);
-
-	lwm2m_engine_create_res_inst("3/0/7/0");
-	lwm2m_engine_set_res_buf("3/0/7/0", &bat_mv, sizeof(bat_mv),
-				 sizeof(bat_mv), 0);
-	lwm2m_engine_create_res_inst("3/0/8/0");
-	lwm2m_engine_set_res_buf("3/0/8/0", &bat_ma, sizeof(bat_ma),
-				 sizeof(bat_ma), 0);
-	lwm2m_engine_create_res_inst("3/0/6/1");
-	lwm2m_engine_set_res_buf("3/0/6/1", &usb_idx, sizeof(usb_idx),
-				 sizeof(usb_idx), 0);
-	lwm2m_engine_create_res_inst("3/0/7/1");
-	lwm2m_engine_set_res_buf("3/0/7/1", &usb_mv, sizeof(usb_mv),
-				 sizeof(usb_mv), 0);
-	lwm2m_engine_create_res_inst("3/0/8/1");
-	lwm2m_engine_set_res_buf("3/0/8/1", &usb_ma, sizeof(usb_ma),
-				 sizeof(usb_ma), 0);
+	lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 6, 0));
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 6, 0), &bat_idx, sizeof(bat_idx), sizeof(bat_idx), 0);
+	lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 7, 0));
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 7, 0), &bat_mv, sizeof(bat_mv), sizeof(bat_mv), 0);
+	lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 8, 0));
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 8, 0), &bat_ma, sizeof(bat_ma), sizeof(bat_ma), 0);
+	lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 6, 1));
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 6, 1), &usb_idx, sizeof(usb_idx), sizeof(usb_idx), 0);
+	lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 7, 1));
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 7, 1), &usb_mv, sizeof(usb_mv), sizeof(usb_mv), 0);
+	lwm2m_create_res_inst(&LWM2M_OBJ(3, 0, 8, 1));
+	lwm2m_set_res_buf(&LWM2M_OBJ(3, 0, 8, 1), &usb_ma, sizeof(usb_ma), sizeof(usb_ma), 0);
 
 	/* setup FIRMWARE object */
-
-#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
-	/* setup data buffer for block-wise transfer */
-	lwm2m_engine_register_pre_write_callback("5/0/0", firmware_get_buf);
-	lwm2m_firmware_set_write_cb(firmware_block_received_cb);
-#endif
-#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_SUPPORT)
-	lwm2m_engine_create_res_inst("5/0/8/0");
-	lwm2m_engine_set_res_buf("5/0/8/0", &supported_protocol[0],
-				 sizeof(supported_protocol[0]),
-				 sizeof(supported_protocol[0]), 0);
-
-	lwm2m_firmware_set_update_cb(firmware_update_cb);
-#endif
-
-	/* setup TEMP SENSOR object */
-	lwm2m_engine_create_obj_inst("3303/0");
-	lwm2m_engine_register_read_callback("3303/0/5700", temperature_get_buf);
-
-	/* IPSO: Light Control object */
-	if (init_led_device() == 0) {
-		lwm2m_engine_create_obj_inst("3311/0");
-		lwm2m_engine_register_post_write_callback("3311/0/5850",
-				led_on_off_cb);
-		lwm2m_engine_set_res_buf("3311/0/5750", LIGHT_NAME,
-					 sizeof(LIGHT_NAME),
-					 sizeof(LIGHT_NAME),
-					 LWM2M_RES_DATA_FLAG_RO);
+	if (IS_ENABLED(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)) {
+		init_firmware_update();
 	}
 
+	/* setup TEMP SENSOR object */
+	init_temp_sensor();
+
+	/* IPSO: Light Control object */
+	init_led_device();
+
 	/* IPSO: Timer object */
-	lwm2m_engine_create_obj_inst("3340/0");
-	lwm2m_engine_register_validate_callback("3340/0/5850",
-			timer_on_off_validate_cb);
-	lwm2m_engine_register_post_write_callback("3340/0/5543",
-			timer_digital_state_cb);
-	lwm2m_engine_set_res_buf("3340/0/5750", TIMER_NAME,
-				 sizeof(TIMER_NAME), sizeof(TIMER_NAME),
-				 LWM2M_RES_DATA_FLAG_RO);
+	init_timer_object();
 
 	return 0;
 }
@@ -480,7 +264,7 @@ static void rd_client_event(struct lwm2m_ctx *client,
 static void observe_cb(enum lwm2m_observe_event event,
 		       struct lwm2m_obj_path *path, void *user_data)
 {
-	char buf[LWM2M_MAX_PATH_STR_LEN];
+	char buf[LWM2M_MAX_PATH_STR_SIZE];
 
 	switch (event) {
 

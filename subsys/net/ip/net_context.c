@@ -38,7 +38,7 @@ LOG_MODULE_REGISTER(net_ctx, CONFIG_NET_CONTEXT_LOG_LEVEL);
 #include "tcp_internal.h"
 #include "net_stats.h"
 
-#if IS_ENABLED(CONFIG_NET_TCP)
+#if defined(CONFIG_NET_TCP)
 #include "tcp.h"
 #endif
 
@@ -757,23 +757,10 @@ int net_context_bind(struct net_context *context, const struct sockaddr *addr,
 			ll_addr->sll_ifindex;
 		net_sll_ptr(&context->local)->sll_protocol =
 			ll_addr->sll_protocol;
-		if (IS_ENABLED(CONFIG_NET_L2_IEEE802154) &&
-		    ll_addr->sll_protocol == ETH_P_IEEE802154 &&
-		    ll_addr->sll_halen > 0) {
-			if (ll_addr->sll_halen !=
-			    IEEE802154_SHORT_ADDR_LENGTH) {
-				return -EINVAL;
-			}
-			net_sll_ptr(&context->local)->sll_addr =
-				ll_addr->sll_addr;
-			net_sll_ptr(&context->local)->sll_halen =
-				ll_addr->sll_halen;
-		} else {
-			net_sll_ptr(&context->local)->sll_addr =
-				net_if_get_link_addr(iface)->addr;
-			net_sll_ptr(&context->local)->sll_halen =
-				net_if_get_link_addr(iface)->len;
-		}
+		net_sll_ptr(&context->local)->sll_addr =
+			net_if_get_link_addr(iface)->addr;
+		net_sll_ptr(&context->local)->sll_halen =
+			net_if_get_link_addr(iface)->len;
 
 		NET_DBG("Context %p bind to type 0x%04x iface[%d] %p addr %s",
 			context, htons(net_context_get_proto(context)),
@@ -907,6 +894,10 @@ int net_context_create_ipv4_new(struct net_context *context,
 	}
 
 	net_pkt_set_ipv4_ttl(pkt, net_context_get_ipv4_ttl(context));
+#if defined(CONFIG_NET_CONTEXT_DSCP_ECN)
+	net_pkt_set_ip_dscp(pkt, net_ipv4_get_dscp(context->options.dscp_ecn));
+	net_pkt_set_ip_ecn(pkt, net_ipv4_get_ecn(context->options.dscp_ecn));
+#endif
 
 	return net_ipv4_create(pkt, src, dst);
 }
@@ -933,6 +924,10 @@ int net_context_create_ipv6_new(struct net_context *context,
 
 	net_pkt_set_ipv6_hop_limit(pkt,
 				   net_context_get_ipv6_hop_limit(context));
+#if defined(CONFIG_NET_CONTEXT_DSCP_ECN)
+	net_pkt_set_ip_dscp(pkt, net_ipv6_get_dscp(context->options.dscp_ecn));
+	net_pkt_set_ip_ecn(pkt, net_ipv6_get_ecn(context->options.dscp_ecn));
+#endif
 
 	return net_ipv6_create(pkt, src, dst);
 }
@@ -1272,6 +1267,22 @@ static int get_context_sndbuf(struct net_context *context,
 	if (len) {
 		*len = sizeof(int);
 	}
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
+static int get_context_dscp_ecn(struct net_context *context,
+				void *value, size_t *len)
+{
+#if defined(CONFIG_NET_CONTEXT_DSCP_ECN)
+	*((int *)value) = context->options.dscp_ecn;
+
+	if (len) {
+		*len = sizeof(int);
+	}
+
 	return 0;
 #else
 	return -ENOTSUP;
@@ -1752,6 +1763,21 @@ static int context_sendto(struct net_context *context,
 		net_pkt_cursor_init(pkt);
 
 		if (net_context_get_proto(context) == IPPROTO_RAW) {
+			char type = (NET_IPV6_HDR(pkt)->vtc & 0xf0);
+
+			/* Set the family to pkt if detected */
+			switch (type) {
+			case 0x60:
+				net_pkt_set_family(pkt, AF_INET6);
+				break;
+			case 0x40:
+				net_pkt_set_family(pkt, AF_INET);
+				break;
+			default:
+				/* Not IP traffic, let it go forward as it is */
+				break;
+			}
+
 			/* Pass to L2: */
 			ret = net_send_data(pkt);
 		} else {
@@ -2299,6 +2325,28 @@ static int set_context_sndbuf(struct net_context *context,
 #endif
 }
 
+static int set_context_dscp_ecn(struct net_context *context,
+				const void *value, size_t len)
+{
+#if defined(CONFIG_NET_CONTEXT_DSCP_ECN)
+	int dscp_ecn = *((int *)value);
+
+	if (len != sizeof(int)) {
+		return -EINVAL;
+	}
+
+	if ((dscp_ecn < 0) || (dscp_ecn > UINT8_MAX)) {
+		return -EINVAL;
+	}
+
+	context->options.dscp_ecn = (uint8_t)dscp_ecn;
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
 int net_context_set_option(struct net_context *context,
 			   enum net_context_option option,
 			   const void *value, size_t len)
@@ -2334,6 +2382,9 @@ int net_context_set_option(struct net_context *context,
 		break;
 	case NET_OPT_SNDBUF:
 		ret = set_context_sndbuf(context, value, len);
+		break;
+	case NET_OPT_DSCP_ECN:
+		ret = set_context_dscp_ecn(context, value, len);
 		break;
 	}
 
@@ -2377,6 +2428,9 @@ int net_context_get_option(struct net_context *context,
 		break;
 	case NET_OPT_SNDBUF:
 		ret = get_context_sndbuf(context, value, len);
+		break;
+	case NET_OPT_DSCP_ECN:
+		ret = get_context_dscp_ecn(context, value, len);
 		break;
 	}
 

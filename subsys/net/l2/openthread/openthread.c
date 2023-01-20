@@ -15,6 +15,8 @@ LOG_MODULE_REGISTER(net_l2_openthread, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 #include <net_private.h>
 
 #include <zephyr/init.h>
+#include <zephyr/sys/check.h>
+#include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/__assert.h>
 #include <version.h>
@@ -174,12 +176,29 @@ void otSysEventSignalPending(void)
 
 static void ot_state_changed_handler(uint32_t flags, void *context)
 {
+	struct openthread_state_changed_cb *entry, *next;
 	struct openthread_context *ot_context = context;
 
 	NET_INFO("State changed! Flags: 0x%08" PRIx32 " Current role: %s",
 		flags,
 		otThreadDeviceRoleToString(otThreadGetDeviceRole(ot_context->instance))
 		);
+
+	if (flags & OT_CHANGED_THREAD_ROLE) {
+		switch (otThreadGetDeviceRole(ot_context->instance)) {
+		case OT_DEVICE_ROLE_CHILD:
+		case OT_DEVICE_ROLE_ROUTER:
+		case OT_DEVICE_ROLE_LEADER:
+			net_if_dormant_off(ot_context->iface);
+			break;
+
+		case OT_DEVICE_ROLE_DISABLED:
+		case OT_DEVICE_ROLE_DETACHED:
+		default:
+			net_if_dormant_on(ot_context->iface);
+			break;
+		}
+	}
 
 	if (flags & OT_CHANGED_IP6_ADDRESS_REMOVED) {
 		NET_DBG("Ipv6 address removed");
@@ -203,6 +222,12 @@ static void ot_state_changed_handler(uint32_t flags, void *context)
 
 	if (state_changed_cb) {
 		state_changed_cb(flags, context);
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&ot_context->state_change_cbs, entry, next, node) {
+		if (entry->state_changed_cb != NULL) {
+			entry->state_changed_cb(flags, ot_context, entry->user_data);
+		}
 	}
 }
 
@@ -446,6 +471,7 @@ int openthread_start(struct openthread_context *ot_context)
 	}
 
 exit:
+
 	openthread_api_mutex_unlock(ot_context);
 
 	return error == OT_ERROR_NONE ? 0 : -EIO;
@@ -474,11 +500,11 @@ int openthread_stop(struct openthread_context *ot_context)
 static int openthread_init(struct net_if *iface)
 {
 	struct openthread_context *ot_context = net_if_l2_data(iface);
-
 	struct k_work_queue_config q_cfg = {
 		.name = "openthread",
 		.no_yield = true,
 	};
+	otError err;
 
 	NET_DBG("openthread_init");
 
@@ -507,14 +533,20 @@ static int openthread_init(struct net_if *iface)
 		otIp6SetReceiveFilterEnabled(ot_context->instance, true);
 		otIp6SetReceiveCallback(ot_context->instance,
 					ot_receive_handler, ot_context);
-		otSetStateChangedCallback(ot_context->instance,
-					  &ot_state_changed_handler,
-					  ot_context);
+		sys_slist_init(&ot_context->state_change_cbs);
+		err = otSetStateChangedCallback(ot_context->instance,
+						&ot_state_changed_handler,
+						ot_context);
+		if (err != OT_ERROR_NONE) {
+			NET_ERR("Could not set state changed callback: %d", err);
+		}
 
 		net_mgmt_init_event_callback(
 			&ip6_addr_cb, ipv6_addr_event_handler,
 			NET_EVENT_IPV6_ADDR_ADD | NET_EVENT_IPV6_MADDR_ADD);
 		net_mgmt_add_event_callback(&ip6_addr_cb);
+
+		net_if_dormant_on(iface);
 	}
 
 	openthread_api_mutex_unlock(ot_context);
@@ -540,6 +572,9 @@ void ieee802154_init(struct net_if *iface)
 
 static enum net_l2_flags openthread_flags(struct net_if *iface)
 {
+	/* TODO: Should report NET_L2_PROMISC_MODE if the radio driver
+	 *       reports the IEEE802154_HW_PROMISC capability.
+	 */
 	return NET_L2_MULTICAST | NET_L2_MULTICAST_SKIP_JOIN_SOLICIT_NODE;
 }
 
@@ -588,6 +623,40 @@ struct otInstance *openthread_get_default_instance(void)
 		openthread_get_default_context();
 
 	return ot_context ? ot_context->instance : NULL;
+}
+
+int openthread_state_changed_cb_register(struct openthread_context *ot_context,
+					 struct openthread_state_changed_cb *cb)
+{
+	CHECKIF(cb == NULL || cb->state_changed_cb == NULL) {
+		return -EINVAL;
+	}
+
+	openthread_api_mutex_lock(ot_context);
+	sys_slist_append(&ot_context->state_change_cbs, &cb->node);
+	openthread_api_mutex_unlock(ot_context);
+
+	return 0;
+}
+
+int openthread_state_changed_cb_unregister(struct openthread_context *ot_context,
+					   struct openthread_state_changed_cb *cb)
+{
+	bool removed;
+
+	CHECKIF(cb == NULL) {
+		return -EINVAL;
+	}
+
+	openthread_api_mutex_lock(ot_context);
+	removed = sys_slist_find_and_remove(&ot_context->state_change_cbs, &cb->node);
+	openthread_api_mutex_unlock(ot_context);
+
+	if (!removed) {
+		return -EALREADY;
+	}
+
+	return 0;
 }
 
 void openthread_set_state_changed_cb(otStateChangedCallback cb)

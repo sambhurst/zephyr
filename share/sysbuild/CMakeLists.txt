@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Nordic Semiconductor
+# Copyright (c) 2021-2023 Nordic Semiconductor
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -68,6 +68,27 @@ add_subdirectory(bootloader)
 
 # This allows for board and app specific images to be included.
 include(${BOARD_DIR}/sysbuild.cmake OPTIONAL)
-include(${APP_DIR}/sysbuild.cmake OPTIONAL)
+
+# This allows image specific sysbuild.cmake to be processed.
+list(LENGTH IMAGES images_length)
+while(NOT "${images_length}" EQUAL "${processed_length}")
+  foreach(image ${IMAGES})
+    if(NOT image IN_LIST images_sysbuild_processed)
+      ExternalProject_Get_property(${image} SOURCE_DIR)
+      include(${SOURCE_DIR}/sysbuild.cmake OPTIONAL)
+      list(APPEND images_sysbuild_processed ${image})
+    endif()
+  endforeach()
+
+  list(LENGTH IMAGES images_length)
+  list(LENGTH images_sysbuild_processed processed_length_new)
+
+  # Check for any duplicate entries in image names to prevent an infinite loop
+  if("${processed_length_new}" EQUAL "${processed_length}")
+    # Image length was different than processed length, but no new images are processed.
+    message(FATAL_ERROR "A duplicate image name was provided, image names must be unique.")
+  endif()
+  set(processed_length ${processed_length_new})
+endwhile()
 
 include(cmake/domains.cmake)

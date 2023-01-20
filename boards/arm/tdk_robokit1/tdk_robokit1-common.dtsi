@@ -81,8 +81,20 @@
 &spi0 {
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-names = "default";
-
+	dmas = <&xdmac 0 DMA_PERID_SPI0_TX>, <&xdmac 1 DMA_PERID_SPI0_RX>;
+	dma-names = "tx", "rx";
+	cs-gpios =<&pioa 31 GPIO_ACTIVE_LOW>;
 	status = "okay";
+
+	icm42688p@0 {
+		compatible = "invensense,icm42688";
+		reg = <0>;
+		spi-max-frequency = <24000000>;
+		accel-hz = <32000>;
+		accel-fs = <16>;
+		gyro-hz = <32000>;
+		gyro-fs = <2000>;
+	};
 };
 
 &spi1 {
@@ -137,6 +149,11 @@ zephyr_udc0: &usbhs {
 &pwm0 {
 	pinctrl-0 = <&pwm_default>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+
+&xdmac {
 	status = "okay";
 };
 

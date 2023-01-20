@@ -573,12 +573,8 @@ workflow here:
    you want to open a pull request with.
 
 #. Review the pull request changes, and verify that you are opening a
-   pull request for the appropriate branch. The title and message from your
-   commit message should appear as well.
-
-#. If you're working on a subsystem branch that's not ``main``,
-   you may need to change the intended branch for the pull request
-   here, for example, by changing the base branch from ``main`` to ``net``.
+   pull request for the appropriate branch (if unsure, use `main`). The title
+   and message from your commit message should appear as well.
 
 #. GitHub will assign one or more suggested reviewers (based on the
    CODEOWNERS file in the repo). If you are a project member, you can
@@ -587,6 +583,13 @@ workflow here:
 #. Click on the submit button and your pull request is sent and awaits
    review.  Email will be sent as review comments are made, or you can check
    on your pull request at https://github.com/zephyrproject-rtos/zephyr/pulls.
+
+   .. note:: As more commits are merged upstream, the GitHub PR page will show
+      a ``This branch is out-of-date with the base branch`` message and a
+      ``Update branch`` button on the PR page. That message should be ignored,
+      as the commits will be rebased as part of merging anyway, and triggering
+      a branch update from the GitHub UI will cause the PR approvals to be
+      dropped.
 
 #. While you're waiting for your pull request to be accepted and merged, you
    can create another branch to work on another issue. (Be sure to make your
@@ -807,3 +810,72 @@ Contributions to External Modules
 Follow the guidelines in the :ref:`modules` section for contributing
 :ref:`new modules <submitting_new_modules>` and
 submitting changes to :ref:`existing modules <changes_to_existing_module>`.
+
+.. _treewide-changes:
+
+Treewide Changes
+****************
+
+This section describes contributions that are treewide changes and some
+additional associated requirements that apply to them. These requirements exist
+to try to give such changes increased review and user visibility due to their
+large impact.
+
+Definition and Decision Making
+==============================
+
+A *treewide change* is defined as any change to Zephyr APIs, coding practices,
+or other development requirements that either implies required changes
+throughout the zephyr source code repository or can reasonably be expected to
+do so for a wide class of external Zephyr-based source code.
+
+This definition is informal by necessity. This is because the decision on
+whether any particular change is treewide can be subjective and may depend on
+additional context.
+
+Project maintainers should use good judgement and prioritize the Zephyr
+developer experience when deciding when a proposed change is treewide.
+Protracted disagreements can be resolved by the Zephyr Project's Technical
+Steering Committee (TSC), but please avoid premature escalation to the TSC.
+
+Requirements for Treewide Changes
+=================================
+
+- The zephyr repository must apply the 'treewide' GitHub label to any issues or
+  pull requests that are treewide changes
+
+- The person proposing a treewide change must create an `RFC issue
+  <https://github.com/zephyrproject-rtos/zephyr/issues/new?assignees=&labels=RFC&template=rfc-proposal.md&title=>`_
+  describing the change, its rationale and impact, etc. before any pull
+  requests related to the change can be merged
+
+- The project's `Architecture Working Group (WG)
+  <https://github.com/zephyrproject-rtos/zephyr/wiki/Architecture-Working-Group>`_
+  must include the issue on the agenda and discuss whether the project will
+  accept or reject the change before any pull requests related to the change
+  can be merged (with escalation to the TSC if consensus is not reached at the
+  WG)
+
+- The Architecture WG must specify the procedure for merging any PRs associated
+  with each individual treewide change, including any required approvals for
+  pull requests affecting specific subsystems or extra review time requirements
+
+- The person proposing a treewide change must email
+  devel@lists.zephyrproject.org about the RFC if it is accepted by the
+  Architecture WG before any pull requests related to the change can be merged
+
+Examples
+========
+
+Some example past treewide changes are:
+
+- the deprecation of version 1 of the :ref:`Logging API <logging_api>` in favor
+  of version 2 (see commit `262cc55609
+  <https://github.com/zephyrproject-rtos/zephyr/commit/262cc55609b73ea61b5f999c6c6daaba20bc5240>`_)
+- the removal of support for a legacy :ref:`dt-bindings` syntax
+  (`6bf761fc0a
+  <https://github.com/zephyrproject-rtos/zephyr/commit/6bf761fc0a2811b037abec0c963d60b00c452acb>`_)
+
+Note that adding a new version of a widely used API while maintaining
+support for the old one is not a treewide change. Deprecation and removal of
+such APIs, however, are treewide changes.

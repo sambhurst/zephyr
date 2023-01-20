@@ -14,3 +14,5 @@ supported:
   - watchdog
   - usb_cdc
   - usb_device
+  - netif:openthread
+  - gpio

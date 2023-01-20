@@ -49,9 +49,15 @@
 	cpu-power-states = <&idle &suspend_to_ram>;
 };
 
+&pcr {
+	status = "okay";
+};
+
 &uart1 {
 	status = "okay";
 	current-speed = <115200>;
+	pinctrl-0 = <&uart1_tx_gpio170 &uart1_rx_gpio171>;
+	pinctrl-names = "default";
 };
 
 &adc0 {
