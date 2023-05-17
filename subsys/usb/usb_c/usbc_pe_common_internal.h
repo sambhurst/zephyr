@@ -15,6 +15,34 @@
 #include "usbc_timer.h"
 
 /**
+ * @brief Used in sub-machines for message transmit and receive operation
+ */
+enum sm_msg_xmit {
+	/* Wait for a message transmission sub-machine state */
+	SM_WAIT_FOR_TX,
+	/* Wait for a message reception sub-machine state */
+	SM_WAIT_FOR_RX,
+};
+
+/**
+ * @brief Used in sub-machines for message source hard reset operation
+ */
+enum sm_hard_reset {
+	/* Start the hard-reset sub-machine state */
+	SM_HARD_RESET_START,
+	/* Wait for hard-reset to complete sub-machine state */
+	SM_HARD_RESET_WAIT,
+};
+
+/**
+ * @brief Policy Engine Errors
+ */
+enum pe_error {
+	/** Transmit error */
+	ERR_XMIT,
+};
+
+/**
  * @brief Policy Engine Layer States
  */
 enum usbc_pe_state {
@@ -40,22 +68,56 @@ enum usbc_pe_state {
 	PE_SNK_GIVE_SINK_CAP,
 	/** PE_SNK_Get_Source_Cap */
 	PE_SNK_GET_SOURCE_CAP,
+
+	/** PE_SRC_Startup */
+	PE_SRC_STARTUP,
+	/** PE_SRC_Discovery */
+	PE_SRC_DISCOVERY,
+	/** PE_SRC_Send_Capabilities */
+	PE_SRC_SEND_CAPABILITIES,
+	/** PE_SRC_Negotiate_capability */
+	PE_SRC_NEGOTIATE_CAPABILITY,
+	/** PE_SRC_Capability_Response */
+	PE_SRC_CAPABILITY_RESPONSE,
+	/** PE_SRC_Transition_Supply */
+	PE_SRC_TRANSITION_SUPPLY,
+	/** PE_SRC_Ready */
+	PE_SRC_READY,
+	/** PE_SRC_Hard_Reset */
+	PE_SRC_HARD_RESET,
+	/** PE_SRC_Hard_Reset_Received */
+	PE_SRC_HARD_RESET_RECEIVED,
+	/** PE_SRC_Transition_To_Default */
+	PE_SRC_TRANSITION_TO_DEFAULT,
+
+	/** PE_SNK_Soft_Reset and PE_SRC_Soft_Reset */
+	PE_SOFT_RESET,
+	/** PE_SNK_Chunk_Received or PE_SRC_Chunk_Received */
+	PE_CHUNK_RECEIVED,
 	/**PE_Send_Soft_Reset */
 	PE_SEND_SOFT_RESET,
-	/** PE_Soft_Reset */
-	PE_SOFT_RESET,
+
 	/** PE_Send_Not_Supported */
 	PE_SEND_NOT_SUPPORTED,
 	/** PE_DRS_Evaluate_Swap */
 	PE_DRS_EVALUATE_SWAP,
 	/** PE_DRS_Send_Swap */
 	PE_DRS_SEND_SWAP,
-	/** PE_SNK_Chunk_Received */
-	PE_SNK_CHUNK_RECEIVED,
+	/** PE_Get_Sink_Cap */
+	PE_GET_SINK_CAP,
 
 	/** PE_Suspend. Not part of the PD specification. */
 	PE_SUSPEND,
 
+	/**
+	 * NOTE: The states below should not be called directly. They're used
+	 * internally by the state machine.
+	 */
+
+	/** PE_SENDER_RESPONSE_PARENT. Not part of the PD specification. */
+	PE_SENDER_RESPONSE_PARENT,
+	/** PE_SRC_HARD_RESET_PARENT. Not part of the PD specification. */
+	PE_SRC_HARD_RESET_PARENT,
 	/** Number of PE States */
 	PE_STATE_COUNT
 };
@@ -110,7 +172,17 @@ enum pe_flags {
 	 * This flag is set when a protocol error occurs.
 	 */
 	PE_FLAGS_PROTOCOL_ERROR = 13,
+	/** This flag is set when a transmit error occurs. */
+	PE_FLAGS_MSG_XMIT_ERROR = 14,
 
+	/* The Port Partner is PD connected */
+	PE_FLAGS_PD_CONNECTED = 15,
+	/* The Port partner has been PD connected at least once */
+	PE_FLAGS_HAS_BEEN_PD_CONNECTED = 16,
+	/* A Protocol Error didn't generate a Soft Reset */
+	PE_FLAGS_PROTOCOL_ERROR_NO_SOFT_RESET = 17,
+	/* This flag is set when the first AMS message is sent */
+	PE_FLAGS_FIRST_MSG_SENT = 18,
 	/** Number of PE Flags */
 	PE_FLAGS_COUNT
 };
@@ -133,7 +205,18 @@ struct policy_engine {
 	enum pd_packet_type soft_reset_sop;
 	/** DPM request */
 	enum usbc_policy_request_t dpm_request;
-
+	/** generic variable used for simple in state statemachines */
+	uint32_t submachine;
+#ifdef CONFIG_USBC_CSM_SOURCE_ONLY
+	/** The Sink made a valid request of the Source if true */
+	bool snk_request_can_be_met;
+	/** Outcome of the Sink request */
+	enum usbc_snk_req_reply_t snk_request_reply;
+	/** Save Sink Request Object */
+	uint32_t snk_request;
+	/** Present Contract stores the current Sink Request */
+	uint32_t present_contract;
+#endif
 	/* Counters */
 
 	/**
@@ -142,21 +225,46 @@ struct policy_engine {
 	 */
 	uint32_t hard_reset_counter;
 
+#ifdef CONFIG_USBC_CSM_SOURCE_ONLY
+	/**
+	 * This counter tracks the number of times a Source Caps message was
+	 * sent.
+	 */
+	uint32_t caps_counter;
+#endif
+
 	/* Timers */
 
-	/** tTypeCSinkWaitCap timer */
-	struct usbc_timer_t pd_t_typec_sink_wait_cap;
 	/** tSenderResponse timer */
 	struct usbc_timer_t pd_t_sender_response;
-	/** tPSTransition timer */
-	struct usbc_timer_t pd_t_ps_transition;
-	/** tSinkRequest timer */
-	struct usbc_timer_t pd_t_sink_request;
 	/** tChunkingNotSupported timer */
 	struct usbc_timer_t pd_t_chunking_not_supported;
 	/** Time to wait before resending message after WAIT reception */
 	struct usbc_timer_t pd_t_wait_to_resend;
+
+#ifdef CONFIG_USBC_CSM_SINK_ONLY
+	/** tTypeCSinkWaitCap timer */
+	struct usbc_timer_t pd_t_typec_sink_wait_cap;
+	/** tPSTransition timer */
+	struct usbc_timer_t pd_t_ps_transition;
+	/** tSinkRequest timer */
+	struct usbc_timer_t pd_t_sink_request;
+#else
+	/** tTypeCSendSourceCap timer */
+	struct usbc_timer_t pd_t_typec_send_source_cap;
+	/** tNoResponse timer */
+	struct usbc_timer_t pd_t_no_response;
+	/** tPSHardReset timer */
+	struct usbc_timer_t pd_t_ps_hard_reset;
+#endif /* CONFIG_USBC_CSM_SINK_ONLY */
 };
+
+/**
+ * @brief First message in AMS has been sent
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_first_msg_sent(const struct device *dev);
 
 /**
  * @brief Sets a Policy Engine state
@@ -285,6 +393,20 @@ bool policy_wait_notify(const struct device *dev, const enum usbc_policy_wait_t 
 void policy_set_src_cap(const struct device *dev, const uint32_t *pdos, const int num_pdos);
 
 /**
+ * @brief Check if the sink request can be met by the DPM
+ */
+enum usbc_snk_req_reply_t policy_check_sink_request(const struct device *dev,
+						const uint32_t request_msg);
+
+/**
+ * @brief Check if the Present Contract is still valid.
+ *
+ * @note The contract is considered "invalid" if the previous current/voltage
+ *	 are no longer available AND the sink fails to make a valid request.
+ */
+bool policy_present_contract_is_valid(const struct device *dev, const uint32_t present_contract);
+
+/**
  * @brief Get a Request Data Object from the DPM
  *
  * @param dev Pointer to the device structure for the driver instance
@@ -310,11 +432,191 @@ bool policy_is_snk_at_default(const struct device *dev);
 void policy_get_snk_cap(const struct device *dev, uint32_t **pdos, int *num_pdos);
 
 /**
+ * @brief Check if Source Power Supply is ready
+ */
+bool policy_is_ps_ready(const struct device *dev);
+
+/**
+ * @brief Informs the Device Policy Manager that the Sink
+ *	  is unable to use the current Source Caps and should
+ *	  should enable a different set of Source Caps. True
+ *	  is returned if new Source Caps are available, else
+ *	  false.
+ */
+bool policy_change_src_caps(const struct device *dev);
+
+/**
+ * @brief End and atomic messaging sequence
+ */
+void pe_dpm_end_ams(const struct device *dev);
+
+/**
  * @brief Handle common DPM requests
  *
  * @param dev Pointer to the device structure for the driver instance
  * @retval true if request was handled, else false
  */
 bool common_dpm_requests(const struct device *dev);
+
+/**
+ * @brief This function must only be called in the subsystem init function.
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ */
+void pe_subsys_init(const struct device *dev);
+
+/**
+ * @brief Start the Policy Engine Layer state machine. This is only called
+ *	  from the Type-C state machine.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_start(const struct device *dev);
+
+/**
+ * @brief Suspend the Policy Engine Layer state machine. This is only called
+ *	  from the Type-C state machine.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_suspend(const struct device *dev);
+
+/**
+ * @brief Run the Policy Engine Layer state machine. This is called from the
+ *	  subsystems port stack thread
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ * @param dpm_request Device Policy Manager request
+ */
+void pe_run(const struct device *dev,
+	    const int32_t dpm_request);
+
+/**
+ * @brief Query if the Policy Engine is running
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ *
+ * @retval TRUE if the Policy Engine is running
+ * @retval FALSE if the Policy Engine is not running
+ */
+bool pe_is_running(const struct device *dev);
+
+/**
+ * @brief Informs the Policy Engine that a message was successfully sent
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_message_sent(const struct device *dev);
+
+/**
+ * @brief Informs the Policy Engine of an error.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ * @param  e policy error
+ * @param type port partner address where error was generated
+ */
+void pe_report_error(const struct device *dev,
+		     const enum pe_error e,
+		     const enum pd_packet_type type);
+
+/**
+ * @brief Informs the Policy Engine that a transmit message was discarded
+ *	  because of an incoming message.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_report_discard(const struct device *dev);
+
+/**
+ * @brief Called by the Protocol Layer to informs the Policy Engine
+ *	  that a message has been received.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_message_received(const struct device *dev);
+
+/**
+ * @brief Informs the Policy Engine that a hard reset was received.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_got_hard_reset(const struct device *dev);
+
+/**
+ * @brief Informs the Policy Engine that a soft reset was received.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_got_soft_reset(const struct device *dev);
+
+/**
+ * @brief Informs the Policy Engine that a hard reset was sent.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_hard_reset_sent(const struct device *dev);
+
+/**
+ * @brief Indicates if an explicit contract is in place
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ *
+ * @retval true if an explicit contract is in place, else false
+ */
+bool pe_is_explicit_contract(const struct device *dev);
+
+/*
+ * @brief Informs the Policy Engine that it should invalidate the
+ *	  explicit contract.
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+void pe_invalidate_explicit_contract(const struct device *dev);
+
+/**
+ * @brief Return true if the PE is is within an atomic messaging sequence
+ *	  that it initiated with a SOP* port partner.
+ *
+ * @note The PRL layer polls this instead of using AMS_START and AMS_END
+ *	  notification from the PE that is called out by the spec
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ */
+bool pe_dpm_initiated_ams(const struct device *dev);
+
+/**
+ * @brief Get the current data role
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ *
+ * @retval data role
+ */
+enum tc_data_role pe_get_data_role(const struct device *dev);
+
+/**
+ * @brief Sets the data role and updates the TCPC
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ * @param dr Data Role to be set
+ */
+void pe_set_data_role(const struct device *dev, enum tc_data_role dr);
+
+/**
+ * @brief Get the current power role
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ *
+ * @retval power role
+ */
+enum tc_power_role pe_get_power_role(const struct device *dev);
+
+/**
+ * @brief Get cable plug role
+ *
+ * @param dev Pointer to the device structure for the driver instance
+ *
+ * @retval cable plug role
+ */
+enum tc_cable_plug pe_get_cable_plug(const struct device *dev);
 
 #endif /* ZEPHYR_SUBSYS_USBC_PE_COMMON_INTERNAL_H_ */

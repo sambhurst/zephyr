@@ -7,6 +7,7 @@
 
 #include <zephyr/drivers/can.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/clock_control/atmel_sam_pmc.h>
 #include <soc.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -19,15 +20,32 @@ LOG_MODULE_REGISTER(can_sam, CONFIG_CAN_LOG_LEVEL);
 #define DT_DRV_COMPAT atmel_sam_can
 
 struct can_sam_config {
+	mm_reg_t base;
 	void (*config_irq)(void);
+	const struct atmel_sam_pmc_config clock_cfg;
 	const struct pinctrl_dev_config *pcfg;
-	uint8_t pmc_id;
 	int divider;
 };
 
 struct can_sam_data {
 	struct can_mcan_msg_sram msg_ram;
 };
+
+static int can_sam_read_reg(const struct device *dev, uint16_t reg, uint32_t *val)
+{
+	const struct can_mcan_config *mcan_config = dev->config;
+	const struct can_sam_config *sam_config = mcan_config->custom;
+
+	return can_mcan_sys_read_reg(sam_config->base, reg, val);
+}
+
+static int can_sam_write_reg(const struct device *dev, uint16_t reg, uint32_t val)
+{
+	const struct can_mcan_config *mcan_config = dev->config;
+	const struct can_sam_config *sam_config = mcan_config->custom;
+
+	return can_mcan_sys_write_reg(sam_config->base, reg, val);
+}
 
 static int can_sam_get_core_clock(const struct device *dev, uint32_t *rate)
 {
@@ -44,7 +62,9 @@ static void can_sam_clock_enable(const struct can_sam_config *sam_cfg)
 	REG_PMC_PCK5 = PMC_PCK_CSS_UPLL_CLK | PMC_PCK_PRES(sam_cfg->divider - 1);
 	PMC->PMC_SCER |= PMC_SCER_PCK5;
 
-	soc_pmc_peripheral_enable(sam_cfg->pmc_id);
+	/* Enable CAN clock in PMC */
+	(void)clock_control_on(SAM_DT_PMC_CONTROLLER,
+			       (clock_control_subsys_t)&sam_cfg->clock_cfg);
 }
 
 static int can_sam_init(const struct device *dev)
@@ -57,6 +77,11 @@ static int can_sam_init(const struct device *dev)
 
 	ret = pinctrl_apply_state(sam_cfg->pcfg, PINCTRL_STATE_DEFAULT);
 	if (ret < 0) {
+		return ret;
+	}
+
+	ret = can_mcan_configure_message_ram(dev, 0U);
+	if (ret != 0) {
 		return ret;
 	}
 
@@ -136,14 +161,17 @@ static void config_can_##inst##_irq(void)                                       
 
 #define CAN_SAM_CFG_INST(inst)						\
 	static const struct can_sam_config can_sam_cfg_##inst = {	\
-		.pmc_id = DT_INST_PROP(inst, peripheral_id),		\
+		.base = (mm_reg_t)DT_INST_REG_ADDR(inst),		\
+		.clock_cfg = SAM_DT_INST_CLOCK_PMC_CFG(inst),		\
 		.divider = DT_INST_PROP(inst, divider),			\
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),		\
 		.config_irq = config_can_##inst##_irq,			\
 	};								\
 									\
 	static const struct can_mcan_config can_mcan_cfg_##inst =	\
-		CAN_MCAN_DT_CONFIG_INST_GET(inst, &can_sam_cfg_##inst);
+		CAN_MCAN_DT_CONFIG_INST_GET(inst, &can_sam_cfg_##inst,  \
+					    can_sam_read_reg,		\
+					    can_sam_write_reg);
 
 #define CAN_SAM_DATA_INST(inst)						\
 	static struct can_sam_data can_sam_data_##inst;			\

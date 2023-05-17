@@ -32,8 +32,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/types.h>
-
+#ifdef CONFIG_ARCH_POSIX
 #include <fcntl.h>
+#else
+#include <zephyr/posix/fcntl.h>
+#endif
+
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 #include <zephyr/net/tls_credentials.h>
 #endif
@@ -103,65 +107,21 @@ static struct zsock_pollfd sock_fds[MAX_POLL_FD];
 static struct lwm2m_ctx *sock_ctx[MAX_POLL_FD];
 static int sock_nfds;
 
-static struct lwm2m_block_context block1_contexts[NUM_BLOCK1_CONTEXT];
+/* Resource wrappers */
+#if defined(CONFIG_LWM2M_COAP_BLOCK_TRANSFER)
+static struct coap_block_context output_block_contexts[NUM_OUTPUT_BLOCK_CONTEXT];
+#endif
+
 /* Resource wrappers */
 struct lwm2m_ctx **lwm2m_sock_ctx(void) { return sock_ctx; }
 
 int lwm2m_sock_nfds(void) { return sock_nfds; }
 
-struct lwm2m_block_context *lwm2m_block1_context(void) { return block1_contexts; }
+#if defined(CONFIG_LWM2M_COAP_BLOCK_TRANSFER)
+struct coap_block_context *lwm2m_output_block_context(void) { return output_block_contexts; }
+#endif
 
 static int lwm2m_socket_update(struct lwm2m_ctx *ctx);
-
-/* for debugging: to print IP addresses */
-char *lwm2m_sprint_ip_addr(const struct sockaddr *addr)
-{
-	static char buf[NET_IPV6_ADDR_LEN];
-
-	if (addr->sa_family == AF_INET6) {
-		return net_addr_ntop(AF_INET6, &net_sin6(addr)->sin6_addr, buf, sizeof(buf));
-	}
-
-	if (addr->sa_family == AF_INET) {
-		return net_addr_ntop(AF_INET, &net_sin(addr)->sin_addr, buf, sizeof(buf));
-	}
-
-	LOG_ERR("Unknown IP address family:%d", addr->sa_family);
-	strcpy(buf, "unk");
-	return buf;
-}
-
-static uint8_t to_hex_digit(uint8_t digit)
-{
-	if (digit >= 10U) {
-		return digit - 10U + 'a';
-	}
-
-	return digit + '0';
-}
-
-char *sprint_token(const uint8_t *token, uint8_t tkl)
-{
-	static char buf[32];
-	char *ptr = buf;
-
-	if (token && tkl != 0) {
-		int i;
-
-		tkl = MIN(tkl, sizeof(buf) / 2 - 1);
-
-		for (i = 0; i < tkl; i++) {
-			*ptr++ = to_hex_digit(token[i] >> 4);
-			*ptr++ = to_hex_digit(token[i] & 0x0F);
-		}
-
-		*ptr = '\0';
-	} else {
-		strcpy(buf, "[no-token]");
-	}
-
-	return buf;
-}
 
 /* utility functions */
 
@@ -458,6 +418,15 @@ int lwm2m_engine_add_service(k_work_handler_t service, uint32_t period_ms)
 {
 	int i;
 
+	if (!service) {
+		return -EINVAL;
+	}
+
+	/* First, try if the service is already registered, and modify it*/
+	if (lwm2m_engine_update_service_period(service, period_ms) == 0) {
+		return 0;
+	}
+
 	/* find an unused service index node */
 	for (i = 0; i < MAX_PERIODIC_SERVICE; i++) {
 		if (!service_node_data[i].service_work) {
@@ -651,18 +620,14 @@ static int socket_send_message(struct lwm2m_ctx *client_ctx)
 
 	if (rc < 0) {
 		LOG_ERR("Failed to send packet, err %d", errno);
-		if (msg->type != COAP_TYPE_CON) {
-			lwm2m_reset_message(msg, true);
-		}
-
-		return -errno;
+		rc = -errno;
 	}
 
 	if (msg->type != COAP_TYPE_CON) {
 		lwm2m_reset_message(msg, true);
 	}
 
-	return 0;
+	return rc;
 }
 
 static void socket_reset_pollfd_events(void)
@@ -771,7 +736,15 @@ static void socket_loop(void)
 			}
 
 			if (sock_fds[i].revents & ZSOCK_POLLOUT) {
-				socket_send_message(sock_ctx[i]);
+				rc = socket_send_message(sock_ctx[i]);
+				/* Drop packets that cannot be send, CoAP layer handles retry */
+				/* Other fatal errors should trigger a recovery */
+				if (rc < 0 && rc != -EAGAIN) {
+					LOG_ERR("send() reported a socket error, %d", -rc);
+					if (sock_ctx[i] != NULL && sock_ctx[i]->fault_cb != NULL) {
+						sock_ctx[i]->fault_cb(-rc);
+					}
+				}
 			}
 		}
 	}
@@ -912,16 +885,16 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 		goto error;
 	}
 
-	flags = fcntl(client_ctx->sock_fd, F_GETFL, 0);
+	flags = zsock_fcntl(client_ctx->sock_fd, F_GETFL, 0);
 	if (flags == -1) {
 		ret = -errno;
-		LOG_ERR("fcntl(F_GETFL) failed (%d)", ret);
+		LOG_ERR("zsock_fcntl(F_GETFL) failed (%d)", ret);
 		goto error;
 	}
-	ret = fcntl(client_ctx->sock_fd, F_SETFL, flags | O_NONBLOCK);
+	ret = zsock_fcntl(client_ctx->sock_fd, F_SETFL, flags | O_NONBLOCK);
 	if (ret == -1) {
 		ret = -errno;
-		LOG_ERR("fcntl(F_SETFL) failed (%d)", ret);
+		LOG_ERR("zsock_fcntl(F_SETFL) failed (%d)", ret);
 		goto error;
 	}
 
@@ -1006,7 +979,7 @@ int lwm2m_engine_resume(void)
 	return 0;
 }
 
-static int lwm2m_engine_init(const struct device *dev)
+static int lwm2m_engine_init(void)
 {
 	int i;
 
@@ -1014,7 +987,10 @@ static int lwm2m_engine_init(const struct device *dev)
 		sys_slist_append(lwm2m_obs_obj_path_list(), &observe_paths[i].node);
 	}
 
-	(void)memset(block1_contexts, 0, sizeof(block1_contexts));
+	lwm2m_clear_block_contexts();
+#if defined(CONFIG_LWM2M_COAP_BLOCK_TRANSFER)
+	(void)memset(output_block_contexts, 0, sizeof(output_block_contexts));
+#endif
 
 	if (IS_ENABLED(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)) {
 		/* Init data cache */

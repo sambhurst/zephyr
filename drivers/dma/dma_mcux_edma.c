@@ -94,7 +94,6 @@ struct dma_mcux_edma_data {
 	struct dma_context dma_ctx;
 	struct call_back data_cb[DT_INST_PROP(0, dma_channels)];
 	ATOMIC_DEFINE(channels_atomic, DT_INST_PROP(0, dma_channels));
-	struct k_mutex dma_mutex;
 };
 
 #define DEV_CFG(dev) \
@@ -121,14 +120,14 @@ static bool data_size_valid(const size_t data_size)
 static void nxp_edma_callback(edma_handle_t *handle, void *param, bool transferDone,
 			      uint32_t tcds)
 {
-	int ret = 1;
+	int ret = -EIO;
 	struct call_back *data = (struct call_back *)param;
 	uint32_t channel = handle->channel;
 
 	if (transferDone) {
 		/* DMA is no longer busy when there are no remaining TCDs to transfer */
 		data->busy = (handle->tcdPool != NULL) && (handle->tcdUsed > 0);
-		ret = 0;
+		ret = DMA_STATUS_COMPLETE;
 	}
 	LOG_DBG("transfer %d", tcds);
 	data->dma_callback(data->dev, data->user_data, channel, ret);
@@ -504,7 +503,6 @@ static int dma_mcux_edma_init(const struct device *dev)
 	config->irq_config_func(dev);
 	memset(dev->data, 0, sizeof(struct dma_mcux_edma_data));
 	memset(tcdpool, 0, sizeof(tcdpool));
-	k_mutex_init(&data->dma_mutex);
 	data->dma_ctx.magic = DMA_MAGIC;
 	data->dma_ctx.dma_channels = config->dma_channels;
 	data->dma_ctx.atomic = data->channels_atomic;

@@ -171,6 +171,14 @@ config GEN_IRQ_VECTOR_TABLE
 config NUM_IRQS
 	int
 
+config RV_BOOT_HART
+	int "Starting HART ID"
+	default 0
+	help
+	  This option sets the starting HART ID for the SMP core.
+	  For RISC-V systems such as MPFS and FU540 this would be set to 1 to
+	  skip the E51 HART 0 as it is not usable in SMP configurations.
+
 config RISCV_PMP
 	bool "RISC-V PMP Support"
 	select THREAD_STACK_INFO
@@ -194,11 +202,26 @@ config PMP_SLOTS
 	  This is the number of PMP entries implemented by the hardware.
 	  Typical values are 8 or 16.
 
+config PMP_NO_TOR
+	bool
+	help
+	  Set this if TOR (Top Of Range) mode is not supported.
+
+config PMP_NO_NA4
+	bool
+	help
+	  Set this if NA4 (Naturally Aligned 4-byte) mode is not supported.
+
+config PMP_NO_NAPOT
+	bool
+	help
+	  Set this if NAPOT (Naturally Aligned Power Of Two) is not supported.
+
 config PMP_POWER_OF_TWO_ALIGNMENT
-	bool "Enforce power-of-two alignment on PMP memory areas"
-	depends on USERSPACE
+	bool "Enforce power-of-two alignment on PMP memory areas" if !PMP_NO_TOR
 	default y if TEST_USERSPACE
 	default y if (PMP_SLOTS = 8)
+	default y if PMP_NO_TOR
 	select MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT
 	select GEN_PRIV_STACKS
 	help
@@ -206,10 +229,20 @@ config PMP_POWER_OF_TWO_ALIGNMENT
 	  memory consumption. Useful when enabling userspace mode with
 	  many memory domains and/or few PMP slots available.
 
+config PMP_GRANULARITY
+	int "The granularity of PMP address matching"
+	default 8 if (PMP_NO_TOR && PMP_NO_NA4)
+	default 4
+	help
+	  The granularity must be a power of 2 greater than or equal to 4
+	  (ie 4, 8, 16, ...), but if neither TOR mode nor NA4 mode is
+	  supported, the minimum granularity is 8.
+
 endif #RISCV_PMP
 
 config PMP_STACK_GUARD
 	def_bool y
+	depends on MULTITHREADING
 	depends on HW_STACK_PROTECTION
 
 config PMP_STACK_GUARD_MIN_SIZE
@@ -234,7 +267,7 @@ config MAIN_STACK_SIZE
 	default 2048 if PMP_STACK_GUARD
 
 config TEST_EXTRA_STACK_SIZE
-	default 1024
+	default 1536
 
 config CMSIS_THREAD_MAX_STACK_SIZE
 	default 1024 if 64BIT
@@ -247,6 +280,9 @@ config ARCH_IRQ_VECTOR_TABLE_ALIGN
 
 config GEN_IRQ_VECTOR_TABLE
 	select RISCV_MTVEC_VECTORED_MODE if SOC_FAMILY_RISCV_PRIVILEGE
+
+config ARCH_HAS_SINGLE_THREAD_SUPPORT
+	default y if !SMP
 
 rsource "Kconfig.isa"
 rsource "Kconfig.core"

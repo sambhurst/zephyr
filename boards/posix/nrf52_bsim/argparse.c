@@ -17,6 +17,7 @@
 #include "bs_dynargs.h"
 #include "bs_cmd_line_typical.h"
 #include "NRF_HWLowL.h"
+#include "time_machine.h"
 
 static bs_args_struct_t *args_struct;
 char executable_name[] = "bs_nrf52_bsim_..";
@@ -61,6 +62,21 @@ static void cmd_nosim_found(char *argv, int offset)
 static void cmd_no_delay_init_found(char *argv, int offset)
 {
 	arg.delay_init = false;
+}
+
+static void cmd_no_sync_preinit_found(char *argv, int offset)
+{
+	arg.sync_preinit = false;
+}
+
+static void cmd_no_sync_preboot_found(char *argv, int offset)
+{
+	arg.sync_preboot = false;
+}
+
+static void cmd_max_resync_offset_found(char *argv, int offset)
+{
+	tm_set_phy_max_resync_offset(arg.max_resync_offset);
 }
 
 static void save_test_arg(struct NRF_bsim_args_t *args, char *argv)
@@ -116,6 +132,29 @@ void nrfbsim_register_args(void)
 		(void *)&nosim, cmd_nosim_found,
 		"(debug feature) Do not connect to the phy"},
 		{ false, false, true,
+		"sync_preinit", "", 'b',
+		(void *)&arg.sync_preinit, NULL,
+		"Postpone pre-initialization and boot "
+		"until the phy has reached time 0 (or start_offset) (by default not set)"
+		},
+		{ false, false, true,
+		"no_sync_preinit", "", 'b',
+		NULL, cmd_no_sync_preinit_found,
+		"Clear sync_preinit. Note that by default sync_preinit is not set"
+		},
+		{ false, false, true,
+		"sync_preboot", "", 'b',
+		(void *)&arg.sync_preboot, NULL,
+		"Postpone CPU boot "
+		"until the phy has reached time 0 (or start_offset) (by default not set)"
+		"If sync_preinit is set, this option has no effect."
+		},
+		{ false, false, true,
+		"no_sync_preboot", "", 'b',
+		NULL, cmd_no_sync_preboot_found,
+		"Clear sync_preboot. Note that by default sync_preboot is not set"
+		},
+		{ false, false, true,
 		"delay_init", "", 'b',
 		(void *)&arg.delay_init, NULL,
 		"If start_offset is used, postpone initialization and startup "
@@ -125,6 +164,13 @@ void nrfbsim_register_args(void)
 		"no_delay_init", "", 'b',
 		NULL, cmd_no_delay_init_found,
 		"Clear delay_init. Note that by default delay_init is not set"},
+		{ false, false, false,
+		"mro", "max_resync_offset", 'd',
+		(void *)&arg.max_resync_offset, cmd_max_resync_offset_found,
+		"Set the max Phy synchronization offset, that is, how far the device time can be "
+		"from the Phy time before it resynchronizes with the Phy again "
+		"(by default 1e6, 1s). Note that this value may be changed programmatically by "
+		"tests"},
 		BS_DUMP_FILES_ARGS,
 		{false, false, false,
 		"testid", "testid", 's',

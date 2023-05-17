@@ -87,17 +87,6 @@ struct lll_conn {
 	};
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
-
-#ifdef CONFIG_BT_LL_SW_LLCP_LEGACY
-	uint16_t max_tx_octets;
-	uint16_t max_rx_octets;
-
-#if defined(CONFIG_BT_CTLR_PHY)
-	uint16_t max_tx_time;
-	uint16_t max_rx_time;
-#endif /* CONFIG_BT_CTLR_PHY */
-
-#else /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 	struct {
 		struct data_pdu_length local;
 		struct data_pdu_length remote;
@@ -109,7 +98,6 @@ struct lll_conn {
 		uint8_t update;
 	} dle;
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
-#endif/* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
 #if defined(CONFIG_BT_CTLR_PHY)
 	uint8_t phy_tx:3;
@@ -151,14 +139,6 @@ struct lll_conn {
 #endif /* CONFIG_BT_CTLR_CONN_RSSI_EVENT */
 #endif /* CONFIG_BT_CTLR_CONN_RSSI */
 
-#if defined(CONFIG_BT_CTLR_RX_ENQUEUE_HOLD)
-#define RX_HOLD_MASK 3U
-#define RX_HOLD_REQ  1U
-#define RX_HOLD_ACK  2U
-	uint8_t rx_hold_req;
-	uint8_t rx_hold_ack;
-#endif /* CONFIG_BT_CTLR_RX_ENQUEUE_HOLD */
-
 #if defined(CONFIG_BT_CTLR_CONN_META)
 	struct lll_conn_meta conn_meta;
 #endif /* CONFIG_BT_CTLR_CONN_META */
@@ -188,6 +168,7 @@ void lll_conn_tx_pkt_set(struct lll_conn *lll, struct pdu_data *pdu_data_tx);
 void lll_conn_pdu_tx_prep(struct lll_conn *lll, struct pdu_data **pdu_data_tx);
 uint8_t lll_conn_force_md_cnt_set(uint8_t force_md_cnt);
 
+extern struct lll_conn *ull_conn_lll_get(uint16_t handle);
 extern void ull_conn_lll_tx_demux_sched(struct lll_conn *lll);
 extern void ull_conn_lll_ack_enqueue(uint16_t handle, struct node_tx *tx);
 extern uint16_t ull_conn_lll_max_tx_octets_get(struct lll_conn *lll);

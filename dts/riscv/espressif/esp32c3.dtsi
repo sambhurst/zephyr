@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <mem.h>
+#include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/interrupt-controller/esp-esp32c3-intmux.h>
@@ -13,6 +14,10 @@
 / {
 	#address-cells = <1>;
 	#size-cells = <1>;
+
+	aliases {
+		die-temp0 = &coretemp;
+	};
 
 	chosen {
 		zephyr,canbus = &twai;
@@ -202,7 +207,7 @@
 			interrupt-parent = <&intc>;
 			clocks = <&rtc ESP32_SPI2_MODULE>;
 			dma-clk = <ESP32_GDMA_MODULE>;
-			dma-host = <1>;
+			dma-host = <0>;
 			status = "disabled";
 		};
 

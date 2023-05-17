@@ -9,7 +9,15 @@
 #include <zephyr/dt-bindings/memory-controller/stm32-fmc-sdram.h>
 
 / {
+	clocks {
+		plli2s: plli2s {
+			compatible = "st,stm32f412-plli2s-clock";
+		};
+	};
+
 	soc {
+		compatible = "st,stm32f446", "st,stm32f4", "simple-bus";
+
 		i2s1: i2s@40013000 {
 			compatible = "st,stm32-i2s";
 			#address-cells = <1>;

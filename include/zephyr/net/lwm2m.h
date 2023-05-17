@@ -64,6 +64,7 @@
 #define IPSO_OBJECT_HUMIDITY_SENSOR_ID      3304
 #define IPSO_OBJECT_LIGHT_CONTROL_ID        3311
 #define IPSO_OBJECT_ACCELEROMETER_ID        3313
+#define IPSO_OBJECT_VOLTAGE_SENSOR_ID       3316
 #define IPSO_OBJECT_CURRENT_SENSOR_ID       3317
 #define IPSO_OBJECT_PRESSURE_ID             3323
 #define IPSO_OBJECT_BUZZER_ID               3338
@@ -445,6 +446,42 @@ void lwm2m_firmware_set_write_cb_inst(uint16_t obj_inst_id, lwm2m_engine_set_dat
  * @return A registered callback function to receive the block transfer data
  */
 lwm2m_engine_set_data_cb_t lwm2m_firmware_get_write_cb_inst(uint16_t obj_inst_id);
+
+/**
+ * @brief Set callback for firmware update cancel.
+ *
+ * LwM2M clients use this function to register a callback to perform actions
+ * on firmware update cancel.
+ *
+ * @param[in] cb A callback function perform actions on firmware update cancel.
+ */
+void lwm2m_firmware_set_cancel_cb(lwm2m_engine_user_cb_t cb);
+
+/**
+ * @brief Get a callback for firmware update cancel.
+ *
+ * @return A registered callback function perform actions on firmware update cancel.
+ */
+lwm2m_engine_user_cb_t lwm2m_firmware_get_cancel_cb(void);
+
+/**
+ * @brief Set data callback for firmware update cancel.
+ *
+ * LwM2M clients use this function to register a callback to perform actions
+ * on firmware update cancel.
+ *
+ * @param[in] obj_inst_id Object instance ID
+ * @param[in] cb A callback function perform actions on firmware update cancel.
+ */
+void lwm2m_firmware_set_cancel_cb_inst(uint16_t obj_inst_id, lwm2m_engine_user_cb_t cb);
+
+/**
+ * @brief Get the callback for firmware update cancel.
+ *
+ * @param[in] obj_inst_id Object instance ID
+ * @return A registered callback function perform actions on firmware update cancel.
+ */
+lwm2m_engine_user_cb_t lwm2m_firmware_get_cancel_cb_inst(uint16_t obj_inst_id);
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_SUPPORT)
 /**
@@ -1983,6 +2020,7 @@ enum lwm2m_rd_client_event {
 	LWM2M_RD_CLIENT_EVENT_QUEUE_MODE_RX_OFF,
 	LWM2M_RD_CLIENT_EVENT_ENGINE_SUSPENDED,
 	LWM2M_RD_CLIENT_EVENT_NETWORK_ERROR,
+	LWM2M_RD_CLIENT_EVENT_REG_UPDATE,
 };
 
 /**
@@ -2086,35 +2124,71 @@ void lwm2m_rd_client_update(void);
  */
 char *lwm2m_path_log_buf(char *buf, struct lwm2m_obj_path *path);
 
+/**
+ * @brief LwM2M send status
+ *
+ * LwM2M send status are generated back to the lwm2m_send_cb_t function in
+ * lwm2m_send_cb()
+ */
+enum lwm2m_send_status {
+	LWM2M_SEND_STATUS_SUCCESS,
+	LWM2M_SEND_STATUS_FAILURE,
+	LWM2M_SEND_STATUS_TIMEOUT,
+};
+
+/**
+ * @typedef lwm2m_send_cb_t
+ * @brief Callback returning send status
+ */
+typedef void (*lwm2m_send_cb_t)(enum lwm2m_send_status status);
+
 /** 
  * @brief LwM2M SEND operation to given path list
  *
- * @deprecated Use lwm2m_send() instead.
+ * @deprecated Use lwm2m_send_cb() instead.
  *
  * @param ctx LwM2M context
  * @param path_list LwM2M Path string list
  * @param path_list_size Length of path list. Max size is CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE
  * @param confirmation_request True request confirmation for operation.
- * 
+ *
  * @return 0 for success or negative in case of error.
  *
  */
+__deprecated
 int lwm2m_engine_send(struct lwm2m_ctx *ctx, char const *path_list[], uint8_t path_list_size,
 		      bool confirmation_request);
 
 /** 
  * @brief LwM2M SEND operation to given path list
  *
+ * @deprecated Use lwm2m_send_cb() instead.
+ *
  * @param ctx LwM2M context
  * @param path_list LwM2M path struct list
  * @param path_list_size Length of path list. Max size is CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE
  * @param confirmation_request True request confirmation for operation.
- * 
+ *
  * @return 0 for success or negative in case of error.
  *
  */
+__deprecated
 int lwm2m_send(struct lwm2m_ctx *ctx, const struct lwm2m_obj_path path_list[],
 	       uint8_t path_list_size, bool confirmation_request);
+
+/** 
+ * @brief LwM2M SEND operation to given path list asynchronously with confirmation callback
+ *
+ * @param ctx LwM2M context
+ * @param path_list LwM2M path struct list
+ * @param path_list_size Length of path list. Max size is CONFIG_LWM2M_COMPOSITE_PATH_LIST_SIZE
+ * @param reply_cb Callback triggered with confirmation state or NULL if not used
+ *
+ * @return 0 for success or negative in case of error.
+ *
+ */
+int lwm2m_send_cb(struct lwm2m_ctx *ctx, const struct lwm2m_obj_path path_list[],
+			  uint8_t path_list_size, lwm2m_send_cb_t reply_cb);
 
 /** 
  * @brief Returns LwM2M client context
@@ -2156,7 +2230,7 @@ int lwm2m_engine_enable_cache(char const *resource_path, struct lwm2m_time_serie
  * @return 0 for success or negative in case of error.
  *
  */
-int lwm2m_enable_cache(struct lwm2m_obj_path *path, struct lwm2m_time_series_elem *data_cache,
+int lwm2m_enable_cache(const struct lwm2m_obj_path *path, struct lwm2m_time_series_elem *data_cache,
 		       size_t cache_len);
 
 #endif	/* ZEPHYR_INCLUDE_NET_LWM2M_H_ */

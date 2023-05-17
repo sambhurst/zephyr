@@ -95,6 +95,54 @@ static int sbs_gauge_get_prop(const struct device *dev, struct fuel_gauge_get_pr
 		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_VOLTAGE, &val);
 		prop->value.voltage = val * 1000;
 		break;
+	case FUEL_GAUGE_SBS_MODE:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_BATTERY_MODE, &val);
+		prop->value.sbs_mode = val;
+		break;
+	case FUEL_GAUGE_CHARGE_CURRENT:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_CHG_CURRENT, &val);
+		prop->value.chg_current = val;
+		break;
+	case FUEL_GAUGE_CHARGE_VOLTAGE:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_CHG_VOLTAGE, &val);
+		prop->value.chg_voltage = val;
+		break;
+	case FUEL_GAUGE_STATUS:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_FLAGS, &val);
+		prop->value.fg_status = val;
+		break;
+	case FUEL_GAUGE_DESIGN_CAPACITY:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_NOM_CAPACITY, &val);
+		prop->value.design_cap = val;
+		break;
+	case FUEL_GAUGE_DESIGN_VOLTAGE:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_DESIGN_VOLTAGE, &val);
+		prop->value.design_volt = val;
+		break;
+	case FUEL_GAUGE_SBS_ATRATE:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_AR, &val);
+		prop->value.sbs_at_rate = val;
+		break;
+	case FUEL_GAUGE_SBS_ATRATE_TIME_TO_FULL:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_ARTTF, &val);
+		prop->value.sbs_at_rate_time_to_full = val;
+		break;
+	case FUEL_GAUGE_SBS_ATRATE_TIME_TO_EMPTY:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_ARTTE, &val);
+		prop->value.sbs_at_rate_time_to_empty = val;
+		break;
+	case FUEL_GAUGE_SBS_ATRATE_OK:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_AROK, &val);
+		prop->value.sbs_at_rate_ok = val;
+		break;
+	case FUEL_GAUGE_SBS_REMAINING_CAPACITY_ALARM:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_REM_CAPACITY_ALARM, &val);
+		prop->value.sbs_remaining_capacity_alarm = val;
+		break;
+	case FUEL_GAUGE_SBS_REMAINING_TIME_ALARM:
+		rc = sbs_cmd_reg_read(dev, SBS_GAUGE_CMD_REM_TIME_ALARM, &val);
+		prop->value.sbs_remaining_time_alarm = val;
+		break;
 	default:
 		rc = -ENOTSUP;
 	}
@@ -116,6 +164,25 @@ static int sbs_gauge_set_prop(const struct device *dev, struct fuel_gauge_set_pr
 				       prop->value.sbs_mfr_access_word);
 		prop->value.sbs_mfr_access_word = val;
 		break;
+	case FUEL_GAUGE_SBS_REMAINING_CAPACITY_ALARM:
+		rc = sbs_cmd_reg_write(dev, SBS_GAUGE_CMD_REM_CAPACITY_ALARM,
+				       prop->value.sbs_remaining_capacity_alarm);
+		prop->value.sbs_remaining_capacity_alarm = val;
+		break;
+	case FUEL_GAUGE_SBS_REMAINING_TIME_ALARM:
+		rc = sbs_cmd_reg_write(dev, SBS_GAUGE_CMD_REM_TIME_ALARM,
+				       prop->value.sbs_remaining_time_alarm);
+		prop->value.sbs_remaining_time_alarm = val;
+		break;
+	case FUEL_GAUGE_SBS_MODE:
+		rc = sbs_cmd_reg_write(dev, SBS_GAUGE_CMD_BATTERY_MODE, prop->value.sbs_mode);
+		prop->value.sbs_mode = val;
+		break;
+	case FUEL_GAUGE_SBS_ATRATE:
+		rc = sbs_cmd_reg_write(dev, SBS_GAUGE_CMD_AR, prop->value.sbs_at_rate);
+		prop->value.sbs_at_rate = val;
+		break;
+
 	default:
 		rc = -ENOTSUP;
 	}
@@ -176,7 +243,7 @@ static int sbs_gauge_init(const struct device *dev)
 	return 0;
 }
 
-static const struct battery_driver_api sbs_gauge_driver_api = {
+static const struct fuel_gauge_driver_api sbs_gauge_driver_api = {
 	.get_property = &sbs_gauge_get_props,
 	.set_property = &sbs_gauge_set_props,
 };
@@ -189,6 +256,7 @@ static const struct battery_driver_api sbs_gauge_driver_api = {
 	};                                                                                         \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(index, &sbs_gauge_init, NULL, NULL, &sbs_gauge_config_##index,       \
-			      POST_KERNEL, 90, &sbs_gauge_driver_api);
+			      POST_KERNEL, CONFIG_FUEL_GAUGE_INIT_PRIORITY,                        \
+			      &sbs_gauge_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(SBS_GAUGE_INIT)

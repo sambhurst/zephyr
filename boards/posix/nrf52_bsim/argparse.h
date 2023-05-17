@@ -22,6 +22,9 @@ struct NRF_bsim_args_t {
 	char *test_case_argv[MAXPARAMS_TESTCASES];
 	int test_case_argc;
 	bool delay_init;
+	bool sync_preinit;
+	bool sync_preboot;
+	double max_resync_offset;
 	nrf_hw_sub_args_t nrf_hw;
 };
 

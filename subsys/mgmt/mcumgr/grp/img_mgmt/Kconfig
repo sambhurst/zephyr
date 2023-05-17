@@ -14,9 +14,10 @@
 
 menuconfig MCUMGR_GRP_IMG
 	bool "Mcumgr handlers for image management"
-	select FLASH
+	depends on FLASH
+	depends on IMG_MANAGER
+	depends on !MCUBOOT_BOOTLOADER_MODE_SINGLE_APP
 	select MPU_ALLOW_FLASH_WRITE if ARM_MPU
-	select IMG_MANAGER
 	select MCUMGR_SMP_CBOR_MIN_DECODING_LEVEL_2
 	help
 	  Enables mcumgr handlers for image management
@@ -58,12 +59,6 @@ config MCUMGR_GRP_IMG_VERBOSE_ERR
 	  Add additional "rsn" key to SMP responses, where provided, explaining
 	  non-0 "rc" codes.
 
-config MCUMGR_GRP_IMG_DUMMY_HDR
-	bool "Return dummy image header data for imgr functions"
-	help
-	  Returns dummy image header data for imgr functions,
-	  useful when there are no images present, Eg: unit tests.
-
 config MCUMGR_GRP_IMG_DIRECT_UPLOAD
 	bool "Allow direct image upload"
 	help
@@ -94,6 +89,13 @@ config MCUMGR_GRP_IMG_FRUGAL_LIST
 	  a device but requires support in client software, which has to default omitted values.
 	  Works correctly with mcumgr-cli.
 
+config MCUMGR_GRP_IMG_VERSION_CMP_USE_BUILD_NUMBER
+	bool "Use build number while comparing image version"
+	help
+	  By default, the image version comparison relies only on version major,
+	  minor and revision. Enable this option to take into account the build
+	  number as well.
+
 config MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK
 	bool "Upload check hook"
 	depends on MCUMGR_MGMT_NOTIFICATION_HOOKS
@@ -111,7 +113,7 @@ config MCUMGR_GRP_IMG_STATUS_HOOKS
 	  or prevent it, CONFIG_MCUMGR_GRP_IMG_UPLOAD_CHECK_HOOK must be used.
 
 module = MCUMGR_GRP_IMG
-module-str = mcumgr_img_mgmt
+module-str = mcumgr_grp_img
 source "subsys/logging/Kconfig.template.log_config"
 
 endif

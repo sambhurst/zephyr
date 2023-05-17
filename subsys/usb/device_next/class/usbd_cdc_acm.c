@@ -393,6 +393,12 @@ static int usbd_cdc_acm_ctd(struct usbd_class_node *const c_nd,
 
 static int usbd_cdc_acm_init(struct usbd_class_node *const c_nd)
 {
+	struct usbd_cdc_acm_desc *desc = c_nd->data->desc;
+
+	desc->iad_cdc.bFirstInterface = desc->if0.bInterfaceNumber;
+	desc->if0_union.bControlInterface = desc->if0.bInterfaceNumber;
+	desc->if0_union.bSubordinateInterface0 = desc->if1.bInterfaceNumber;
+
 	return 0;
 }
 
@@ -925,7 +931,7 @@ static int cdc_acm_config_get(const struct device *dev,
 }
 #endif /* CONFIG_UART_USE_RUNTIME_CONFIGURE */
 
-static int usbd_cdc_acm_init_wq(const struct device *dev)
+static int usbd_cdc_acm_init_wq(void)
 {
 	k_work_queue_init(&cdc_acm_work_q);
 	k_work_queue_start(&cdc_acm_work_q, cdc_acm_stack,

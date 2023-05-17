@@ -104,10 +104,6 @@ add_library(zephyr_interface INTERFACE)
 # flags that come with zephyr_interface.
 zephyr_library_named(zephyr)
 
-if(CONFIG_LEGACY_INCLUDE_PATH)
-  zephyr_include_directories(include/zephyr)
-endif()
-
 zephyr_include_directories(
   include
   ${PROJECT_BINARY_DIR}/include/generated
@@ -155,6 +151,13 @@ endif()
 # @Intent: Set compiler specific flag for disabling strict aliasing rule
 zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,no_strict_aliasing>>)
 zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler-cpp,no_strict_aliasing>>)
+
+# Extra warnings options for twister run
+if (CONFIG_COMPILER_WARNINGS_AS_ERRORS)
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,warnings_as_errors>>)
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:ASM>:$<TARGET_PROPERTY:asm,warnings_as_errors>>)
+  zephyr_link_libraries($<TARGET_PROPERTY:linker,warnings_as_errors>)
+endif()
 
 # @Intent: Set compiler flags to enable buffer overflow checks in libc functions
 # @details:
@@ -279,7 +282,7 @@ endif()
 # @Intent: Set compiler specific macro inclusion of AUTOCONF_H
 zephyr_compile_options("SHELL: $<TARGET_PROPERTY:compiler,imacros> ${AUTOCONF_H}")
 
-if(NOT CONFIG_PICOLIBC)
+if(CONFIG_COMPILER_FREESTANDING)
   # @Intent: Set compiler specific flag for bare metal freestanding option
   zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,freestanding>>)
   zephyr_compile_options($<$<COMPILE_LANGUAGE:ASM>:$<TARGET_PROPERTY:compiler,freestanding>>)
@@ -296,15 +299,19 @@ zephyr_compile_options($<TARGET_PROPERTY:compiler,no_common>)
 # @Intent: Set compiler specific flag for production of debug information
 zephyr_compile_options($<TARGET_PROPERTY:compiler,debug>)
 
+if(CONFIG_COMPILER_SAVE_TEMPS)
+  # @Intent: Set compiler specific flag for saving temporary object files
+  zephyr_compile_options($<TARGET_PROPERTY:compiler,save_temps>)
+endif()
+
+if(NOT CONFIG_COMPILER_TRACK_MACRO_EXPANSION)
+  # @Intent: Set compiler specific flags to not track macro expansion
+  zephyr_compile_options($<TARGET_PROPERTY:compiler,no_track_macro_expansion>)
+endif()
+
 if(CONFIG_COMPILER_COLOR_DIAGNOSTICS)
 # @Intent: Set compiler specific flag for diagnostic messages
 zephyr_compile_options($<TARGET_PROPERTY:compiler,diagnostic>)
-endif()
-
-if("${SPARSE}" STREQUAL "y")
-  list(APPEND TOOLCHAIN_C_FLAGS -D__CHECKER__)
-  # Avoid compiler "attribute directive ignored" warnings
-  list(APPEND TOOLCHAIN_C_FLAGS -Wno-attributes)
 endif()
 
 zephyr_compile_options(
@@ -381,12 +388,18 @@ zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler-cpp,
 
 # @Intent: Do not make position independent code / executable
 zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,no_position_independent>>)
+zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,no_position_independent>>)
+zephyr_link_libraries($<TARGET_PROPERTY:linker,no_position_independent>)
 
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
 include(cmake/extra_flags.cmake)
 
 zephyr_cc_option(-fno-asynchronous-unwind-tables)
+
+if(CONFIG_USERSPACE)
+  zephyr_compile_options($<TARGET_PROPERTY:compiler,no_global_merge>)
+endif()
 
 if(CONFIG_THREAD_LOCAL_STORAGE)
 # Only support local exec TLS model at this point.
@@ -406,7 +419,9 @@ zephyr_compile_options(${COMPILER_OPT_AS_LIST})
 
 # TODO: Include arch compiler options at this point.
 
-if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" AND
+   NOT CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM" AND
+   NOT CMAKE_C_COMPILER_ID STREQUAL "ARMClang")
   # GCC assumed
   zephyr_cc_option(-fno-reorder-functions)
 
@@ -433,14 +448,15 @@ zephyr_cc_option_ifdef(CONFIG_STACK_USAGE            -fstack-usage)
 # application code. This saves some memory, stops leaking user locations
 # in binaries, makes failure logs more deterministic and most
 # importantly makes builds more deterministic
-
-# If several match then the last one wins. This matters for instances
-# like tests/ and samples/: they're inside all of them! Then let's
-# strip as little as possible.
-zephyr_cc_option(-fmacro-prefix-map=${CMAKE_SOURCE_DIR}=CMAKE_SOURCE_DIR)
-zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=ZEPHYR_BASE)
-if(WEST_TOPDIR)
-  zephyr_cc_option(-fmacro-prefix-map=${WEST_TOPDIR}=WEST_TOPDIR)
+if(CONFIG_BUILD_OUTPUT_STRIP_PATHS)
+  # If several match then the last one wins. This matters for instances
+  # like tests/ and samples/: they're inside all of them! Then let's
+  # strip as little as possible.
+  zephyr_cc_option(-fmacro-prefix-map=${CMAKE_SOURCE_DIR}=CMAKE_SOURCE_DIR)
+  zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=ZEPHYR_BASE)
+  if(WEST_TOPDIR)
+    zephyr_cc_option(-fmacro-prefix-map=${WEST_TOPDIR}=WEST_TOPDIR)
+  endif()
 endif()
 
 # TODO: Archiver arguments
@@ -528,11 +544,28 @@ add_custom_command(
   OUTPUT ${PROJECT_BINARY_DIR}/include/generated/version.h
   COMMAND ${CMAKE_COMMAND} -DZEPHYR_BASE=${ZEPHYR_BASE}
     -DOUT_FILE=${PROJECT_BINARY_DIR}/include/generated/version.h
+    -DVERSION_TYPE=KERNEL
+    -DVERSION_FILE=${ZEPHYR_BASE}/VERSION
     ${build_version_argument}
     -P ${ZEPHYR_BASE}/cmake/gen_version_h.cmake
   DEPENDS ${ZEPHYR_BASE}/VERSION ${git_dependency}
 )
 add_custom_target(version_h DEPENDS ${PROJECT_BINARY_DIR}/include/generated/version.h)
+
+if(EXISTS ${APPLICATION_SOURCE_DIR}/VERSION)
+  add_custom_command(
+    OUTPUT ${PROJECT_BINARY_DIR}/include/generated/app_version.h
+    COMMAND ${CMAKE_COMMAND} -DZEPHYR_BASE=${ZEPHYR_BASE}
+      -DOUT_FILE=${PROJECT_BINARY_DIR}/include/generated/app_version.h
+      -DVERSION_TYPE=APP
+      -DVERSION_FILE=${APPLICATION_SOURCE_DIR}/VERSION
+      ${build_version_argument}
+      -P ${ZEPHYR_BASE}/cmake/gen_version_h.cmake
+    DEPENDS ${APPLICATION_SOURCE_DIR}/VERSION ${git_dependency}
+  )
+  add_custom_target(app_version_h DEPENDS ${PROJECT_BINARY_DIR}/include/generated/app_version.h)
+  add_dependencies(zephyr_interface app_version_h)
+endif()
 
 # Unfortunately, the order in which CMakeLists.txt code is processed
 # matters so we need to be careful about how we order the processing
@@ -585,6 +618,9 @@ endforeach()
 set(ZEPHYR_CURRENT_MODULE_DIR)
 set(ZEPHYR_CURRENT_CMAKE_DIR)
 
+get_property(LIBC_LINK_LIBRARIES TARGET zephyr_interface PROPERTY LIBC_LINK_LIBRARIES)
+zephyr_link_libraries(${LIBC_LINK_LIBRARIES})
+
 set(syscall_list_h   ${CMAKE_CURRENT_BINARY_DIR}/include/generated/syscall_list.h)
 set(syscalls_json    ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/syscalls.json)
 set(struct_tags_json ${CMAKE_CURRENT_BINARY_DIR}/misc/generated/struct_tags.json)
@@ -611,7 +647,7 @@ execute_process(
   ${ZEPHYR_BASE}/scripts/build/subfolder_list.py
   --directory        ${ZEPHYR_BASE}/include      # Walk this directory
   --out-file         ${syscalls_subdirs_txt}     # Write file with discovered folder
-  --trigger          ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
+  --trigger-file     ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
   ${syscalls_links}                              # If defined, create symlinks for dependencies
 )
 file(STRINGS ${syscalls_subdirs_txt} PARSE_SYSCALLS_PATHS_DEPENDS ENCODING UTF-8)
@@ -644,7 +680,7 @@ else()
     ${ZEPHYR_BASE}/scripts/build/subfolder_list.py
     --directory        ${ZEPHYR_BASE}/include      # Walk this directory
     --out-file         ${syscalls_subdirs_txt}     # Write file with discovered folder
-    --trigger          ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
+    --trigger-file     ${syscalls_subdirs_trigger} # Trigger file that is used for json generation
     ${syscalls_links}                              # If defined, create symlinks for dependencies
     DEPENDS ${PARSE_SYSCALLS_PATHS_DEPENDS}
   )
@@ -733,6 +769,7 @@ add_custom_command(OUTPUT include/generated/syscall_dispatch.c ${syscall_list_h}
   --base-output      include/generated/syscalls           # Write to this dir
   --syscall-dispatch include/generated/syscall_dispatch.c # Write this file
   --syscall-list     ${syscall_list_h}
+  $<$<BOOL:${CONFIG_USERSPACE}>:--gen-mrsh-files>
   ${SYSCALL_LONG_REGISTERS_ARG}
   ${SYSCALL_SPLIT_TIMEOUT_ARG}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -740,7 +777,7 @@ add_custom_command(OUTPUT include/generated/syscall_dispatch.c ${syscall_list_h}
   )
 
 # This is passed into all calls to the gen_kobject_list.py script.
-set(gen_kobject_list_include_args --include ${struct_tags_json})
+set(gen_kobject_list_include_args --include-subsystem-list ${struct_tags_json})
 
 set(DRV_VALIDATION ${PROJECT_BINARY_DIR}/include/generated/driver-validation.h)
 add_custom_command(
@@ -1715,7 +1752,18 @@ endif()
 
 # Generate and use MCUboot related artifacts as needed.
 if(CONFIG_BOOTLOADER_MCUBOOT)
-  include(${CMAKE_CURRENT_LIST_DIR}/cmake/mcuboot.cmake)
+  get_target_property(signing_script zephyr_property_target SIGNING_SCRIPT)
+  if(NOT signing_script)
+    set_target_properties(zephyr_property_target PROPERTIES SIGNING_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/cmake/mcuboot.cmake)
+  endif()
+endif()
+
+# Include signing script, if set
+get_target_property(signing_script zephyr_property_target SIGNING_SCRIPT)
+if(signing_script)
+  message(STATUS "Including signing script: ${signing_script}")
+
+  include(${signing_script})
 endif()
 
 # Generate USB-C VIF policies in XML format

@@ -291,7 +291,7 @@ static const char *iface_flags2str(struct net_if *iface)
 	static char str[sizeof("POINTOPOINT") + sizeof("PROMISC") +
 			sizeof("NO_AUTO_START") + sizeof("SUSPENDED") +
 			sizeof("MCAST_FORWARD") + sizeof("IPv4") +
-			sizeof("IPv6")];
+			sizeof("IPv6") + sizeof("NO_ND") + sizeof("NO_MLD")];
 	int pos = 0;
 
 	if (net_if_flag_is_set(iface, NET_IF_POINTOPOINT)) {
@@ -325,6 +325,16 @@ static const char *iface_flags2str(struct net_if *iface)
 	if (net_if_flag_is_set(iface, NET_IF_IPV6)) {
 		pos += snprintk(str + pos, sizeof(str) - pos,
 				"IPv6,");
+	}
+
+	if (net_if_flag_is_set(iface, NET_IF_IPV6_NO_ND)) {
+		pos += snprintk(str + pos, sizeof(str) - pos,
+				"NO_ND,");
+	}
+
+	if (net_if_flag_is_set(iface, NET_IF_IPV6_NO_MLD)) {
+		pos += snprintk(str + pos, sizeof(str) - pos,
+				"NO_MLD,");
 	}
 
 	/* get rid of last ',' character */
@@ -430,12 +440,14 @@ static void iface_cb(struct net_if *iface, void *user_data)
 	}
 #endif /* CONFIG_NET_L2_VIRTUAL */
 
+	net_if_lock(iface);
 	if (net_if_get_link_addr(iface) &&
 	    net_if_get_link_addr(iface)->addr) {
 		PR("Link addr : %s\n",
 		   net_sprint_ll_addr(net_if_get_link_addr(iface)->addr,
 				      net_if_get_link_addr(iface)->len));
 	}
+	net_if_unlock(iface);
 
 	PR("MTU       : %d\n", net_if_get_mtu(iface));
 	PR("Flags     : %s\n", iface_flags2str(iface));
@@ -852,6 +864,14 @@ static void print_eth_stats(struct net_if *iface, struct net_stats_eth *data,
 	PR("Bcast sent       : %u\n", data->broadcast.tx);
 	PR("Mcast received   : %u\n", data->multicast.rx);
 	PR("Mcast sent       : %u\n", data->multicast.tx);
+
+	PR("Send errors      : %u\n", data->errors.tx);
+	PR("Receive errors   : %u\n", data->errors.rx);
+	PR("Collisions       : %u\n", data->collisions);
+	PR("Send Drops       : %u\n", data->tx_dropped);
+	PR("Send timeouts    : %u\n", data->tx_timeout_count);
+	PR("Send restarts    : %u\n", data->tx_restart_queue);
+	PR("Unknown protocol : %u\n", data->unknown_protocol);
 
 #if defined(CONFIG_NET_STATISTICS_ETHERNET_VENDOR)
 	if (data->vendor) {
@@ -4294,7 +4314,7 @@ static enum net_verdict handle_ipv6_echo_reply(struct net_pkt *pkt,
 		snprintf(time_buf, sizeof(time_buf),
 #ifdef CONFIG_FPU
 			 "time=%.2f ms",
-			 ((uint32_t)k_cyc_to_ns_floor64(cycles) / 1000000.f)
+			 (double)((uint32_t)k_cyc_to_ns_floor64(cycles) / 1000000.f)
 #else
 			 "time=%d ms",
 			 ((uint32_t)k_cyc_to_ns_floor64(cycles) / 1000000)
@@ -4374,7 +4394,7 @@ static enum net_verdict handle_ipv4_echo_reply(struct net_pkt *pkt,
 		snprintf(time_buf, sizeof(time_buf),
 #ifdef CONFIG_FPU
 			 "time=%.2f ms",
-			 ((uint32_t)k_cyc_to_ns_floor64(cycles) / 1000000.f)
+			 (double)((uint32_t)k_cyc_to_ns_floor64(cycles) / 1000000.f)
 #else
 			 "time=%d ms",
 			 ((uint32_t)k_cyc_to_ns_floor64(cycles) / 1000000)
@@ -4484,6 +4504,7 @@ static void ping_work(struct k_work *work)
 
 	if (ret != 0) {
 		PR_WARNING("Failed to send ping, err: %d", ret);
+		ping_done(ctx);
 		return;
 	}
 
@@ -4675,6 +4696,74 @@ static int cmd_net_ping(const struct shell *sh, size_t argc, char *argv[])
 #endif
 }
 
+static bool is_pkt_part_of_slab(const struct k_mem_slab *slab, const char *ptr)
+{
+	size_t last_offset = (slab->num_blocks - 1) * slab->block_size;
+	size_t ptr_offset;
+
+	/* Check if pointer fits into slab buffer area. */
+	if ((ptr < slab->buffer) || (ptr > slab->buffer + last_offset)) {
+		return false;
+	}
+
+	/* Check if pointer offset is correct. */
+	ptr_offset = ptr - slab->buffer;
+	if (ptr_offset % slab->block_size != 0) {
+		return false;
+	}
+
+	return true;
+}
+
+struct ctx_pkt_slab_info {
+	const void *ptr;
+	bool pkt_source_found;
+};
+
+static void check_context_pool(struct net_context *context, void *user_data)
+{
+#if defined(CONFIG_NET_CONTEXT_NET_PKT_POOL)
+	if (!net_context_is_used(context)) {
+		return;
+	}
+
+	if (context->tx_slab) {
+		struct ctx_pkt_slab_info *info = user_data;
+		struct k_mem_slab *slab = context->tx_slab();
+
+		if (is_pkt_part_of_slab(slab, info->ptr)) {
+			info->pkt_source_found = true;
+		}
+	}
+#endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */
+}
+
+static bool is_pkt_ptr_valid(const void *ptr)
+{
+	struct k_mem_slab *rx, *tx;
+
+	net_pkt_get_info(&rx, &tx, NULL, NULL);
+
+	if (is_pkt_part_of_slab(rx, ptr) || is_pkt_part_of_slab(tx, ptr)) {
+		return true;
+	}
+
+	if (IS_ENABLED(CONFIG_NET_CONTEXT_NET_PKT_POOL)) {
+		struct ctx_pkt_slab_info info;
+
+		info.ptr = ptr;
+		info.pkt_source_found = false;
+
+		net_context_foreach(check_context_pool, &info);
+
+		if (info.pkt_source_found) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static struct net_pkt *get_net_pkt(const char *ptr_str)
 {
 	uint8_t buf[sizeof(intptr_t)];
@@ -4750,6 +4839,14 @@ static int cmd_net_pkt(const struct shell *sh, size_t argc, char *argv[])
 		if (!pkt) {
 			PR_ERROR("Invalid ptr value (%s). "
 				 "Example: 0x01020304\n", argv[1]);
+
+			return -ENOEXEC;
+		}
+
+		if (!is_pkt_ptr_valid(pkt)) {
+			PR_ERROR("Pointer is not recognized as net_pkt (%s).\n",
+				 argv[1]);
+
 			return -ENOEXEC;
 		}
 

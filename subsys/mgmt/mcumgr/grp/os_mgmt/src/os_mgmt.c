@@ -14,6 +14,7 @@
 #include <zephyr/mgmt/mcumgr/smp/smp.h>
 #include <zephyr/mgmt/mcumgr/mgmt/handlers.h>
 #include <zephyr/mgmt/mcumgr/grp/os_mgmt/os_mgmt.h>
+#include <zephyr/logging/log.h>
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -40,6 +41,8 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #endif
 #endif
+
+LOG_MODULE_REGISTER(mcumgr_os_grp, CONFIG_MCUMGR_GRP_OS_LOG_LEVEL);
 
 #ifdef CONFIG_REBOOT
 static void os_mgmt_reset_work_handler(struct k_work *work);
@@ -288,6 +291,10 @@ static int os_mgmt_taskstat_read(struct smp_streamer *ctxt)
 	/* Iterate the list of tasks, encoding each. */
 	k_thread_foreach(os_mgmt_taskstat_encode_one, (void *)&iterator_ctx);
 
+	if (!iterator_ctx.ok) {
+		LOG_ERR("Task iterator status is not OK");
+	}
+
 	if (!iterator_ctx.ok ||
 	    !zcbor_map_end_encode(zse, CONFIG_MCUMGR_GRP_OS_TASKSTAT_MAX_NUM_THREADS)) {
 		return MGMT_ERR_EMSGSIZE;
@@ -315,10 +322,22 @@ static void os_mgmt_reset_cb(struct k_timer *timer)
 static int os_mgmt_reset(struct smp_streamer *ctxt)
 {
 #if defined(CONFIG_MCUMGR_GRP_OS_RESET_HOOK)
-	int rc = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_RESET, NULL, 0);
+	zcbor_state_t *zse = ctxt->writer->zs;
+	int32_t ret_rc;
+	uint16_t ret_group;
+	enum mgmt_cb_return status;
 
-	if (rc != MGMT_ERR_EOK) {
-		return rc;
+	status = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_RESET, NULL, 0, &ret_rc, &ret_group);
+
+	if (status != MGMT_CB_OK) {
+		bool ok;
+
+		if (status == MGMT_CB_ERROR_RC) {
+			return ret_rc;
+		}
+
+		ok = smp_add_cmd_ret(zse, ret_group, (uint16_t)ret_rc);
+		return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 	}
 #endif
 
@@ -383,6 +402,12 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 		.buffer_size = sizeof(output),
 		.prior_output = &prior_output,
 	};
+#endif
+
+#ifdef CONFIG_MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
+	enum mgmt_cb_return status;
+	int32_t ret_rc;
+	uint16_t ret_group;
 #endif
 
 	if (zcbor_map_decode_bulk(zsd, fs_info_decode, ARRAY_SIZE(fs_info_decode), &decoded)) {
@@ -459,7 +484,7 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 #ifdef CONFIG_MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
 	/* Run callbacks to see if any additional handlers will add options */
 	(void)mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_INFO_CHECK, &check_data,
-				   sizeof(check_data));
+				   sizeof(check_data), &ret_rc, &ret_group);
 #endif
 
 	if (valid_formats != format.len) {
@@ -622,11 +647,18 @@ static int os_mgmt_info(struct smp_streamer *ctxt)
 
 #ifdef CONFIG_MCUMGR_GRP_OS_INFO_CUSTOM_HOOKS
 	/* Call custom handler command for additional output/processing */
-	rc = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_INFO_APPEND, &append_data,
-				  sizeof(append_data));
+	status = mgmt_callback_notify(MGMT_EVT_OP_OS_MGMT_INFO_APPEND, &append_data,
+				      sizeof(append_data), &ret_rc, &ret_group);
 
-	if (rc != MGMT_ERR_EOK) {
-		return rc;
+	if (status != MGMT_CB_OK) {
+		bool ok;
+
+		if (status == MGMT_CB_ERROR_RC) {
+			return ret_rc;
+		}
+
+		ok = smp_add_cmd_ret(zse, ret_group, (uint16_t)ret_rc);
+		return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 	}
 #endif
 

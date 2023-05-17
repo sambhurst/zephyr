@@ -5,11 +5,15 @@
  */
 
 #include <st/h7/stm32h7.dtsi>
-#include <zephyr/dt-bindings/display/stm32_ltdc.h>
+#include <zephyr/dt-bindings/display/panel.h>
 #include <zephyr/dt-bindings/flash_controller/ospi.h>
+
+/delete-node/ &adc3;
 
 / {
 	soc {
+		compatible = "st,stm32h7a3", "st,stm32h7", "simple-bus";
+
 		flash-controller@52002000 {
 			flash0: flash@8000000 {
 				compatible = "st,stm32-nv-flash", "soc-nv-flash";
@@ -20,8 +24,17 @@
 			};
 		};
 
+		adc2: adc@40022100 {
+			temp-channel = <18>;
+			vref-channel = <19>;
+		};
+
 		dmamux1: dmamux@40020800 {
-			dma-requests= <111>;
+			dma-requests= <107>;
+		};
+
+		dmamux2: dmamux@58025800 {
+			dma-requests= <107>;
 		};
 
 		usbotg_hs: usb@40040000 {

@@ -327,7 +327,7 @@ class KconfigCheck(ComplianceTest):
                                                "gen_driver_kconfig_dts.py")
         binding_path = os.path.join(ZEPHYR_BASE, "dts", "bindings")
         cmd = [sys.executable, zephyr_drv_kconfig_path,
-               '--kconfig-out', kconfig_dts_file, '--bindings', binding_path]
+               '--kconfig-out', kconfig_dts_file, '--bindings-dirs', binding_path]
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT)
@@ -603,10 +603,20 @@ flagged.
                               # visible to compliance.
         "BOOT_UPGRADE_ONLY", # Used in example adjusting MCUboot config, but
                              # symbol is defined in MCUboot itself.
+        "BOOT_SERIAL_BOOT_MODE",     # Used in (sysbuild-based) test/
+                                     # documentation
+        "BOOT_SERIAL_CDC_ACM",       # Used in (sysbuild-based) test
+        "BOOT_SERIAL_ENTRANCE_GPIO", # Used in (sysbuild-based) test
+        "BOOT_SERIAL_IMG_GRP_HASH",  # Used in documentation
+        "BOOT_VALIDATE_SLOT0",       # Used in (sysbuild-based) test
+        "BOOT_WATCHDOG_FEED",        # Used in (sysbuild-based) test
+        "BTTESTER_LOG_LEVEL",  # Used in tests/bluetooth/tester
+        "BTTESTER_LOG_LEVEL_DBG",  # Used in tests/bluetooth/tester
         "CDC_ACM_PORT_NAME_",
         "CLOCK_STM32_SYSCLK_SRC_",
         "CMU",
         "BT_6LOWPAN",  # Defined in Linux, mentioned in docs
+        "CMD_CACHE",  # Defined in U-Boot, mentioned in docs
         "COUNTER_RTC_STM32_CLOCK_SRC",
         "CRC",  # Used in TI CC13x2 / CC26x2 SDK comment
         "DEEP_SLEEP",  # #defined by RV32M1 in ext/
@@ -621,10 +631,19 @@ flagged.
         "FOO_SETTING_1",
         "FOO_SETTING_2",
         "LSM6DSO_INT_PIN",
+        "LLVM_USE_LD",   # Both LLVM_USE_* are in cmake/toolchain/llvm/Kconfig
+        "LLVM_USE_LLD",  # which are only included if LLVM is selected but
+                         # not other toolchains. Compliance check would complain,
+                         # for example, if you are using GCC.
         "MCUBOOT_LOG_LEVEL_WRN",        # Used in example adjusting MCUboot
                                         # config,
+        "MCUBOOT_LOG_LEVEL_INF",
         "MCUBOOT_DOWNGRADE_PREVENTION", # but symbols are defined in MCUboot
                                         # itself.
+        "MCUBOOT_ACTION_HOOKS",     # Used in (sysbuild-based) test
+        "MCUBOOT_CLEANUP_ARM_CORE", # Used in (sysbuild-based) test
+        "MCUBOOT_SERIAL",           # Used in (sysbuild-based) test/
+                                    # documentation
         "MISSING",
         "MODULES",
         "MYFEATURE",
@@ -816,6 +835,10 @@ class PyLint(ComplianceTest):
         pylintrc = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                 "pylintrc"))
 
+        # Path to additional pylint check scripts
+        check_script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                        "../pylint/checkers"))
+
         # List of files added/modified by the commit(s).
         files = get_files(filter="d")
 
@@ -826,14 +849,23 @@ class PyLint(ComplianceTest):
         if not py_files:
             return
 
-        pylintcmd = ["pylint", "--rcfile=" + pylintrc] + py_files
+        python_environment = os.environ.copy()
+        if "PYTHONPATH" in python_environment:
+            python_environment["PYTHONPATH"] = check_script_dir + ":" + \
+                                               python_environment["PYTHONPATH"]
+        else:
+            python_environment["PYTHONPATH"] = check_script_dir
+
+        pylintcmd = ["pylint", "--rcfile=" + pylintrc,
+                     "--load-plugins=argparse-checker"] + py_files
         logger.info(cmd2str(pylintcmd))
         try:
             subprocess.run(pylintcmd,
                            check=True,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT,
-                           cwd=GIT_TOP)
+                           cwd=GIT_TOP,
+                           env=python_environment)
         except subprocess.CalledProcessError as ex:
             output = ex.output.decode("utf-8")
             regex = r'^\s*(\S+):(\d+):(\d+):\s*([A-Z]\d{4}):\s*(.*)$'
@@ -930,7 +962,7 @@ class BinaryFiles(ComplianceTest):
     def run(self):
         BINARY_ALLOW_PATHS = ("doc/", "boards/", "samples/")
         # svg files are always detected as binary, see .gitattributes
-        BINARY_ALLOW_EXT = (".jpg", ".jpeg", ".png", ".svg")
+        BINARY_ALLOW_EXT = (".jpg", ".jpeg", ".png", ".svg", ".webp")
 
         for stat in git("diff", "--numstat", "--diff-filter=A",
                         COMMIT_RANGE).splitlines():
@@ -1073,17 +1105,19 @@ def resolve_path_hint(hint):
         return hint
 
 
-def parse_args():
+def parse_args(argv):
 
     default_range = 'HEAD~1..HEAD'
     parser = argparse.ArgumentParser(
-        description="Check for coding style and documentation warnings.")
+        description="Check for coding style and documentation warnings.", allow_abbrev=False)
     parser.add_argument('-c', '--commits', default=default_range,
                         help=f'''Commit range in the form: a..[b], default is
                         {default_range}''')
     parser.add_argument('-o', '--output', default="compliance.xml",
                         help='''Name of outfile in JUnit format,
                         default is ./compliance.xml''')
+    parser.add_argument('-n', '--no-case-output', action="store_true",
+                        help="Do not store the individual test case output.")
     parser.add_argument('-l', '--list', action="store_true",
                         help="List all checks and exit")
     parser.add_argument("-v", "--loglevel", choices=['DEBUG', 'INFO', 'WARNING',
@@ -1101,7 +1135,7 @@ def parse_args():
     parser.add_argument('--annotate', action="store_true",
                         help="Print GitHub Actions-compatible annotations.")
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 def _main(args):
     # The "real" main(), which is wrapped to catch exceptions and report them
@@ -1184,10 +1218,11 @@ def _main(args):
 
         suite.add_testcase(test.case)
 
-    xml = JUnitXml()
-    xml.add_testsuite(suite)
-    xml.update_statistics()
-    xml.write(args.output, pretty=True)
+    if args.output:
+        xml = JUnitXml()
+        xml.add_testsuite(suite)
+        xml.update_statistics()
+        xml.write(args.output, pretty=True)
 
     failed_cases = []
     name2doc = {testcase.name: testcase.doc
@@ -1208,21 +1243,25 @@ def _main(args):
     if n_fails:
         print(f"{n_fails} checks failed")
         for case in failed_cases:
-            errmsg = ""
+            for res in case.result:
+                errmsg = res.text.strip()
+                logging.error(f"Test {case.name} failed: \n{errmsg}")
+            if args.no_case_output:
+                continue
             with open(f"{case.name}.txt", "w") as f:
                 docs = name2doc.get(case.name)
                 f.write(f"{docs}\n")
                 for res in case.result:
                     errmsg = res.text.strip()
-                    logging.error(f"Test {case.name} failed: \n{errmsg}")
                     f.write(f'\n {errmsg}')
 
-    print(f"\nComplete results in {args.output}")
+    if args.output:
+        print(f"\nComplete results in {args.output}")
     return n_fails
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
 
     try:
         # pylint: disable=unused-import
@@ -1260,4 +1299,4 @@ def err(msg):
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/sys/util.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/shell/shell_dummy.h>
 #include <zephyr/mgmt/mcumgr/mgmt/mgmt.h>
 #include <zephyr/mgmt/mcumgr/mgmt/handlers.h>
@@ -17,13 +18,15 @@
 #include <zcbor_encode.h>
 #include <zcbor_decode.h>
 
+LOG_MODULE_REGISTER(mcumgr_shell_grp, CONFIG_MCUMGR_GRP_SHELL_LOG_LEVEL);
+
 static int
 shell_exec(const char *line)
 {
-	const struct shell *shell = shell_backend_dummy_get_ptr();
+	const struct shell *sh = shell_backend_dummy_get_ptr();
 
-	shell_backend_dummy_clear_output(shell);
-	return shell_execute_cmd(shell, line);
+	shell_backend_dummy_clear_output(sh);
+	return shell_execute_cmd(sh, line);
 }
 
 const char *
@@ -84,7 +87,9 @@ shell_mgmt_exec(struct smp_streamer *ctxt)
 			 * to buffer, but should be rather MGMT_ERR_ENOMEM.
 			 */
 			if ((len + value.len) >= (ARRAY_SIZE(line) - 1)) {
-				return MGMT_ERR_EINVAL;
+				ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_SHELL,
+						     SHELL_MGMT_RET_RC_COMMAND_TOO_LONG);
+				goto end;
 			}
 
 			memcpy(&line[len], value.value, value.len);
@@ -101,7 +106,9 @@ shell_mgmt_exec(struct smp_streamer *ctxt)
 	/* Failed to compose command line? */
 	if (len == 0) {
 		/* We do not bother to close decoder */
-		return MGMT_ERR_EINVAL;
+		LOG_ERR("Failed to compose command line");
+		ok = smp_add_cmd_ret(zse, MGMT_GROUP_ID_SHELL, SHELL_MGMT_RET_RC_EMPTY_COMMAND);
+		goto end;
 	}
 
 	rc = shell_exec(line);
@@ -120,6 +127,7 @@ shell_mgmt_exec(struct smp_streamer *ctxt)
 
 	zcbor_map_end_decode(zsd);
 
+end:
 	return ok ? MGMT_ERR_EOK : MGMT_ERR_EMSGSIZE;
 }
 
@@ -139,5 +147,24 @@ static void shell_mgmt_register_group(void)
 {
 	mgmt_register_group(&shell_mgmt_group);
 }
+
+#ifdef CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL
+int shell_mgmt_translate_error_code(uint16_t ret)
+{
+	int rc;
+
+	switch (ret) {
+	case SHELL_MGMT_RET_RC_COMMAND_TOO_LONG:
+	case SHELL_MGMT_RET_RC_EMPTY_COMMAND:
+	rc = MGMT_ERR_EINVAL;
+	break;
+
+	default:
+	rc = MGMT_ERR_EUNKNOWN;
+	}
+
+	return rc;
+}
+#endif
 
 MCUMGR_HANDLER_DEFINE(shell_mgmt, shell_mgmt_register_group);

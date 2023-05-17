@@ -19,6 +19,7 @@
 #include <zephyr/sys/__assert.h>
 #include <soc.h>
 #include <zephyr/init.h>
+#include <zephyr/drivers/interrupt_controller/exti_stm32.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/reset.h>
@@ -1087,9 +1088,19 @@ static inline void uart_stm32_dma_tx_enable(const struct device *dev)
 
 static inline void uart_stm32_dma_tx_disable(const struct device *dev)
 {
+#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32u5_dma)
+	ARG_UNUSED(dev);
+
+	/*
+	 * Errata Sheet ES0499 : STM32U575xx and STM32U585xx device errata
+	 * USART does not generate DMA requests after setting/clearing DMAT bit
+	 * (also seen on stm32H5 serie)
+	 */
+#else
 	const struct uart_stm32_config *config = dev->config;
 
 	LL_USART_DisableDMAReq_TX(config->usart);
+#endif /* ! st_stm32u5_dma */
 }
 
 static inline void uart_stm32_dma_rx_enable(const struct device *dev)
@@ -1216,7 +1227,7 @@ void uart_stm32_dma_rx_cb(const struct device *dma_dev, void *user_data,
 	const struct device *uart_dev = user_data;
 	struct uart_stm32_data *data = uart_dev->data;
 
-	if (status != 0) {
+	if (status < 0) {
 		async_evt_rx_err(data, status);
 		return;
 	}
@@ -1791,10 +1802,14 @@ static int uart_stm32_pm_action(const struct device *dev,
 
 		/* Move pins to sleep state */
 		err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
-		if (err == -ENOENT) {
-			/* Warn but don't block PM suspend */
-			LOG_WRN("(LP)UART pinctrl sleep state not available ");
-		} else if (err < 0) {
+		if ((err < 0) && (err != -ENOENT)) {
+			/*
+			 * If returning -ENOENT, no pins where defined for sleep mode :
+			 * Do not output on console (might sleep already) when going to sleep,
+			 * "(LP)UART pinctrl sleep state not available"
+			 * and don't block PM suspend.
+			 * Else return the error.
+			 */
 			return err;
 		}
 		break;

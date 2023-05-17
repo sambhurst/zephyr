@@ -1,3 +1,5 @@
 tests:
-  lib.mem_blocks.stats:
-    tags: heap mem_blocks.stats
+  libraries.mem_blocks.stats:
+    tags:
+      - heap
+      - mem_blocks.stats
